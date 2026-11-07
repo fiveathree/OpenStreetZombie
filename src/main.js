@@ -7,7 +7,16 @@ import { MATCH_TIME, xpNeed, rollUpgrades } from './stats.js';
 const $ = s => document.querySelector(s);
 const canvas = $('#c'), ctx = canvas.getContext('2d', { alpha: false });
 const ov = $('#ov'), card = $('#card');
-const input = createInput(canvas, $('#stick'));
+// zoom：記住上次嘅倍數（讀唔到 localStorage 就用 1）
+let zoomSaved = 1;
+try { zoomSaved = Number(localStorage.getItem('osz-zoom')) || 1; } catch {}
+function zoom(f) {
+  if (!scene || mode === 'title') return;
+  zoomSaved = scene.zoomBy(f);
+  try { localStorage.setItem('osz-zoom', zoomSaved); } catch {}
+}
+const input = createInput(canvas, $('#stick'), zoom);
+document.querySelectorAll('#zoom button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); zoom(b.dataset.z > 0 ? 1.25 : 0.8); }));
 const mobile = matchMedia('(pointer: coarse)').matches;
 const WHO = { player: '你', tank: '坦克', medic: '醫療', dps: '輸出', all: '全隊' };
 const CMDS = ['follow', 'spread', 'hold', 'focus'];
@@ -47,6 +56,7 @@ function showTitle() {
 
 function start() {
   scene = createMidScene(map, { maxZombies: mobile ? 170 : 260 });
+  scene.setZoom(zoomSaved);
   mode = 'play';
   ov.hidden = true;
   document.body.classList.add('playing');
@@ -100,6 +110,8 @@ document.querySelectorAll('#cmds button').forEach(b => {
   b.addEventListener('pointerdown', e => { e.preventDefault(); setCommand(b.dataset.cmd); });
 });
 addEventListener('keydown', e => {
+  if (mode === 'play' && (e.key === '+' || e.key === '=')) return zoom(1.25);
+  if (mode === 'play' && (e.key === '-' || e.key === '_')) return zoom(0.8);
   const n = '1234'.indexOf(e.key);
   if (n < 0) return;
   if (mode === 'play') setCommand(CMDS[n]);

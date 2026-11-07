@@ -133,6 +133,20 @@ export function buildMap(data) {
       }
     }
   });
+  // 街道名：沿路每大約 80 米放一個，同名嘅唔好太近（巷 = 細字，拉遠時唔顯示）
+  const labels = [];
+  for (const r of roads) {
+    if (!r.name) continue;
+    let next = 20;
+    alongRoads([r], 2, (_, x, y, ux, uy) => {
+      if ((next -= 2) > 0) return;
+      if (labels.some(l => l.name === r.name && Math.hypot(l.x - x, l.y - y) < 60)) return;
+      let a = Math.atan2(uy, ux);
+      if (a > Math.PI / 2) a -= Math.PI; else if (a < -Math.PI / 2) a += Math.PI; // 字唔好倒轉
+      labels.push({ name: r.name, x, y, a, minor: r.name.endsWith('巷') });
+      next = 80;
+    });
+  }
   for (const p of data.open) trace(open, p, true);
   for (const b of data.buildings) trace(bld, b, true);
   for (const r of roads) {
@@ -177,5 +191,5 @@ export function buildMap(data) {
     }
   }
 
-  return { name: data.name, size, n, walk, cells, start, pois, idx, free, los, move, cellCenter, draw };
+  return { name: data.name, size, n, walk, cells, start, pois, labels, idx, free, los, move, cellCenter, draw };
 }

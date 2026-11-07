@@ -53,6 +53,10 @@ body.playing #cmds { display: grid; }
 #cmds button.on kbd { color: #3a1f10; }
 @media (pointer: coarse) { #cmds kbd { display: none; } #cmds { grid-template-columns: repeat(2, 68px); } #cmds button { height: 56px; } }
 
+#zoom { position: fixed; right: calc(12px + var(--safe-r)); bottom: calc(136px + var(--safe-b)); flex-direction: column; gap: 6px; }
+#zoom button { width: 40px; height: 40px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 900 20px var(--display); padding: 0; cursor: pointer; touch-action: none; }
+@media (pointer: coarse) { #zoom { bottom: calc(148px + var(--safe-b)); } }
+
 #toast { position: fixed; left: 50%; top: 24%; transform: translateX(-50%) rotate(-2deg); background: var(--infect); color: #f1e9dc; font-weight: 900; font-size: clamp(20px, 5vw, 32px); padding: 4px 18px; letter-spacing: .1em; pointer-events: none; opacity: 0; transition: opacity .4s; white-space: nowrap; }
 #toast.show { opacity: 1; transition: none; }
 

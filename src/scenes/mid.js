@@ -18,7 +18,8 @@ export function createMidScene(map, { maxZombies = 220 } = {}) {
   const flow = createFlowField(map), leaderFlow = createFlowField(map);
   const spatial = createSpatial(map.size, 4);
   const pharmacies = map.pois.filter(p => p.type === 'pharmacy').map(p => ({ ...p, pool: PHARMACY.pool, active: false }));
-  const cam = { x: player.x, y: player.y, z: 20, hw: 20, hh: 20 };
+  const cam = { x: player.x, y: player.y, z: 20, hw: 20, hh: 20, zoom: 1, zoomTarget: 1 };
+  const ZOOM_MIN = 0.45, ZOOM_MAX = 2;
   const holdPos = new Map();
   const st = { t: 0, kills: 0, level: 1, xp: 0, pendingLevels: 0, over: null, command: 'follow', focus: null, toast: null, squad };
   let flowT = 0, flowTurn = false, spawnAcc = 0, surgeIdx = 0, follow = player;
@@ -197,6 +198,13 @@ export function createMidScene(map, { maxZombies = 220 } = {}) {
     if (c === 'hold') for (const a of squad) holdPos.set(a, { x: a.x, y: a.y });
   }
 
+  // zoom：factor > 1 拉近；返回新倍數
+  function zoomBy(factor) {
+    cam.zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cam.zoomTarget * factor));
+    return cam.zoomTarget;
+  }
+  function setZoom(v) { cam.zoom = cam.zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v || 1)); }
+
   function pickUpgrade(u) {
     applyUpgrade(u, squad);
     st.pendingLevels--;
@@ -207,7 +215,8 @@ export function createMidScene(map, { maxZombies = 220 } = {}) {
   function render(ctx, W, H, dpr, dt = 0) {
     cam.x += (follow.x - cam.x) * Math.min(1, dt * 6);
     cam.y += (follow.y - cam.y) * Math.min(1, dt * 6);
-    cam.z = Math.max(10, Math.min(30, Math.min(W, H) / 30));
+    cam.zoom += (cam.zoomTarget - cam.zoom) * Math.min(1, dt * 10);
+    cam.z = Math.max(10, Math.min(30, Math.min(W, H) / 30)) * cam.zoom;
     cam.hw = W / 2 / cam.z; cam.hh = H / 2 / cam.z;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#121518';
@@ -216,6 +225,25 @@ export function createMidScene(map, { maxZombies = 220 } = {}) {
     ctx.setTransform(s, 0, 0, s, dpr * W / 2 - cam.x * s, dpr * H / 2 - cam.y * s);
     map.draw(ctx);
     const vis = (x, y, m = 3) => Math.abs(x - cam.x) < cam.hw + m && Math.abs(y - cam.y) < cam.hh + m;
+
+    // 街道名（螢幕座標畫，字大細唔跟 zoom 變）
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const l of map.labels) {
+      if (l.minor && cam.zoom < 0.9) continue;
+      if (!vis(l.x, l.y, 10)) continue;
+      ctx.save();
+      ctx.translate(W / 2 + (l.x - cam.x) * cam.z, H / 2 + (l.y - cam.y) * cam.z);
+      ctx.rotate(l.a);
+      ctx.font = l.minor ? '500 11px "Noto Sans TC", sans-serif' : '900 13px "Noto Sans TC", sans-serif';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(23,25,24,.9)';
+      ctx.strokeText(l.name, 0, 0);
+      ctx.fillStyle = l.minor ? '#7d8075' : '#a9a796';
+      ctx.fillText(l.name, 0, 0);
+      ctx.restore();
+    }
+    ctx.setTransform(s, 0, 0, s, dpr * W / 2 - cam.x * s, dpr * H / 2 - cam.y * s);
 
     // 藥房範圍
     ctx.setLineDash([0.8, 0.8]);
@@ -361,5 +389,5 @@ export function createMidScene(map, { maxZombies = 220 } = {}) {
     follow = { x: map.start.x + Math.sin(t * 0.05) * 30, y: map.start.y + Math.cos(t * 0.037) * 30 };
   }
 
-  return { state: st, update, render, command, pickUpgrade, idle, squad };
+  return { state: st, update, render, command, pickUpgrade, idle, squad, zoomBy, setZoom };
 }
