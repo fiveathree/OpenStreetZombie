@@ -277,22 +277,33 @@ addEventListener('keydown', e => {
 const dispEl = $('#dispatch');
 let dispId = null;
 function openDispatch(id) { dispId = id; renderDispatch(); dispEl.hidden = false; }
-function closeDispatch() { dispId = null; dispEl.hidden = true; }
+function closeDispatch() { dispId = null; dispEl.hidden = true; dispEl._html = ''; }
+// 面板每 0.1 秒更新一次數字；只有內容真係變咗先換 HTML，掣用「撳落」觸發（唔使等放手），咁先撳得到
 function renderDispatch() {
   if (!dispId || scene?.kind !== 'big') return closeDispatch();
   const d = scene.info(dispId);
-  dispEl.innerHTML = `
-    <header><b>${esc(d.name)}</b><span>${Math.round(d.hp)}/${Math.round(d.maxHp)}</span><button class="x" id="dx" aria-label="關閉">✕</button></header>
+  const html = `
+    <header><b>${esc(d.name)}</b><span>${Math.round(d.hp)}/${Math.round(d.maxHp)}</span><button class="x" data-do="close" aria-label="關閉">✕</button></header>
     <p>守點隊友 ${d.guards.length}/${d.cap}・守備兵 ${d.soldierN}・零件 ${d.parts}</p>
     <div class="dlist">${d.allies.map(a => `<div><b>${esc(a.name)}</b><span>${a.state !== 'ok' ? (a.state === 'dead' ? '復活中' : '倒地') : a.here ? '守緊呢度' : a.mode?.kind === 'garrison' ? '守緊第度' : '跟隊'}</span>
-      ${a.here ? `<button data-recall="${a.role}">召回</button>` : `<button data-assign="${a.role}" ${d.guards.length >= d.cap ? 'disabled' : ''}>派去守</button>`}</div>`).join('')}</div>
-    <div class="drow"><button id="dsq" ${d.parts >= BIG.squadCost && d.soldierN < 6 ? '' : 'disabled'}>造守備小隊（零件 ${BIG.squadCost}）</button><button id="dup" ${d.parts >= BIG.upgradeCost ? '' : 'disabled'}>升級（零件 ${BIG.upgradeCost}）</button></div>`;
-  $('#dx').onclick = closeDispatch;
-  dispEl.querySelectorAll('[data-assign]').forEach(b => b.onclick = () => { scene.assign(dispId, b.dataset.assign); renderDispatch(); });
-  dispEl.querySelectorAll('[data-recall]').forEach(b => b.onclick = () => { scene.recallAlly(b.dataset.recall); renderDispatch(); });
-  $('#dsq').onclick = () => { scene.buildSquad(dispId); renderDispatch(); };
-  $('#dup').onclick = () => { scene.upgrade(dispId); renderDispatch(); };
+      ${a.here ? `<button data-do="recall" data-r="${a.role}">召回</button>` : `<button data-do="assign" data-r="${a.role}" ${d.guards.length >= d.cap ? 'disabled' : ''}>派去守</button>`}</div>`).join('')}</div>
+    <div class="drow"><button data-do="squad" ${d.parts >= BIG.squadCost && d.soldierN < 6 ? '' : 'disabled'}>造守備小隊（零件 ${BIG.squadCost}）</button><button data-do="upgrade" ${d.parts >= BIG.upgradeCost ? '' : 'disabled'}>升級（零件 ${BIG.upgradeCost}）</button></div>`;
+  if (html !== dispEl._html) { dispEl.innerHTML = html; dispEl._html = html; }
 }
+dispEl.addEventListener('pointerdown', e => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled || !dispId) return;
+  e.preventDefault();
+  const r = b.dataset.r;
+  switch (b.dataset.do) {
+    case 'close': return closeDispatch();
+    case 'assign': scene.assign(dispId, r); break;
+    case 'recall': scene.recallAlly(r); break;
+    case 'squad': scene.buildSquad(dispId); break;
+    case 'upgrade': scene.upgrade(dispId); break;
+  }
+  renderDispatch();
+});
 const mm = $('#minimap'), mmCtx = mm.getContext('2d');
 mm.addEventListener('pointerdown', e => {
   e.preventDefault();
