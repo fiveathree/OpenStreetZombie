@@ -34,7 +34,8 @@ body:not(.m-big) .m-only-big { display: none !important; }
 #squad li { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; column-gap: 6px; font-size: 12px; }
 #squad li b { font-weight: 900; }
 #squad li span { color: var(--dim); font-size: 11px; }
-#squad li small { font: 600 11px var(--num); color: var(--infect); }
+#squad li small { font: 600 11px var(--display); color: var(--dim); }
+#squad li[data-state="down"] small, #squad li[data-state="dead"] small { color: var(--infect); }
 #squad li i { grid-column: 1 / -1; height: 4px; background: #0b0d0e; display: block; }
 #squad li em { display: block; height: 100%; background: #cfc8b4; }
 #squad li.r-player b { color: var(--signal); }
@@ -107,9 +108,9 @@ body.m-street #side { right: calc(12px + var(--safe-r)); bottom: calc(118px + va
 @media (pointer: coarse) { #side kbd { display: none; } #side button { height: 56px; width: 68px; } #side { right: calc(170px + var(--safe-r)); } }
 
 /* 小地圖（大地圖用） */
-#minimap { position: fixed; left: calc(10px + var(--safe-l)); bottom: calc(22px + var(--safe-b)); width: 150px; height: 150px; border: 1px solid var(--line); inset: auto auto calc(22px + var(--safe-b)) calc(10px + var(--safe-l)); cursor: pointer; }
-@media (max-width: 420px) { #minimap { width: 120px; height: 120px; } #lookBack { bottom: calc(150px + var(--safe-b)) !important; } }
-#lookBack { position: fixed; left: calc(10px + var(--safe-l)); bottom: calc(180px + var(--safe-b)); border: 1px solid var(--signal); background: var(--panel); color: var(--signal); font: 900 13px var(--display); padding: 6px 10px; cursor: pointer; touch-action: none; }
+#minimap { position: fixed; left: calc(10px + var(--safe-l)); bottom: calc(22px + var(--safe-b)); width: 190px; height: 190px; border: 1px solid var(--line); inset: auto auto calc(22px + var(--safe-b)) calc(10px + var(--safe-l)); cursor: pointer; }
+@media (max-width: 420px) { #minimap { width: 140px; height: 140px; } #lookBack { bottom: calc(170px + var(--safe-b)) !important; } }
+#lookBack { position: fixed; left: calc(10px + var(--safe-l)); bottom: calc(220px + var(--safe-b)); border: 1px solid var(--signal); background: var(--panel); color: var(--signal); font: 900 13px var(--display); padding: 6px 10px; cursor: pointer; touch-action: none; }
 body.m-big #lookBack.hud[hidden] { display: none !important; }
 
 /* 小地圖（街道衝鋒） */
@@ -186,3 +187,10 @@ body.m-street #stats .timer b { font-size: 20px; }
 .rar { font: 600 10px var(--num); font-style: normal; padding: 0 3px; margin-right: 4px; border: 1px solid currentColor; }
 .r-UR { color: #d9a060; } .r-SSR { color: #c07a45; } .r-SR { color: #8fa6c0; } .r-R { color: #8fbf7a; } .r-C { color: var(--dim); }
 #squad li.guest b { color: #d9a060; }
+
+/* 大地圖：揀人 */
+body.m-big #squad { pointer-events: auto; }
+body.m-big #squad li:not(.r-player) { cursor: pointer; }
+#squad li.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
+#selHint { position: fixed; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); max-width: min(520px, 92vw); background: var(--panel); border: 1px solid var(--ink); color: var(--ink); font-size: 13px; padding: 5px 10px; pointer-events: none; }
+body.m-big #selHint.hud[hidden] { display: none !important; }

@@ -34,7 +34,7 @@ export function createBigScene(map, cfg = {}) {
   const pois = createPois(map.pois);
   const cam = makeCam(player.x, player.y);
   const night = createNight();
-  const st = { t: 0, kills: 0, over: null, toasts: [], squad, loot, shards: 0, parts: BIG.startParts, level: 1, xp: 0, pendingLevels: 0, respawn: 0, recall: 0, help: new Set(), buffT: 0, isNight: false, charShards: {} };
+  const st = { t: 0, kills: 0, over: null, toasts: [], squad, loot, shards: 0, parts: BIG.startParts, level: 1, xp: 0, pendingLevels: 0, respawn: 0, recall: 0, help: new Set(), buffT: 0, isNight: false, charShards: {}, sel: -1 };
   const toast = m => st.toasts.push(m);
   const effect = e => effects.push(e);
   let killsThisFrame = 0;
@@ -230,6 +230,7 @@ export function createBigScene(map, cfg = {}) {
         if (m.kind === 'garrison') { const s = structs.find(k => k.id === m.id); if (!s || !s.alive) { a.mode = { kind: 'follow' }; continue; } const ang = (m.slot || 0) * 2.1; a.goal = { x: s.x + Math.cos(ang) * 4, y: s.y + Math.sin(ang) * 4 }; a.goalFlow = structFlows.get(s.id); }
         else if (m.kind === 'lane') { const f = laneFront(a, m.lane); a.goal = f.goal; a.goalFlow = null; }
         else if (m.kind === 'boss') { a.goal = jboss; a.goalFlow = bossFlow; }
+        else if (m.kind === 'point') { a.goal = m; a.goalFlow = m.flow; }
         else if (m.kind === 'base') { a.goal = base; a.goalFlow = structFlows.get('base'); }
       }
       updateAlly(a, world, dt);
@@ -313,11 +314,11 @@ export function createBigScene(map, cfg = {}) {
     const s = structs.find(k => k.id === id);
     return {
       ...s, cap: BIG[s.kind].cap, guards: garrisonOf(id).map(m => m.role), soldierN: s.soldiers.length, parts: Math.floor(st.parts),
-      allies: squad.filter(m => m !== player).map(m => ({ role: m.role, name: m.name, label: m.label, state: m.state, mode: m.mode, here: m.mode?.kind === 'garrison' && m.mode.id === id })),
+      allies: squad.filter(m => m !== player).map(m => ({ idx: squad.indexOf(m), role: m.role, name: m.name, label: m.label, state: m.state, mode: m.mode, here: m.mode?.kind === 'garrison' && m.mode.id === id })),
     };
   }
-  function assign(id, role) {
-    const a = squad.find(m => m.role === role), s = structs.find(k => k.id === id);
+  function assign(id, idx) {
+    const a = squad[idx], s = structs.find(k => k.id === id);
     if (!a || !s?.alive) return false;
     const g = garrisonOf(id);
     if (g.length >= BIG[s.kind].cap) { toast(`${s.name}已經守滿`); return false; }
@@ -325,7 +326,7 @@ export function createBigScene(map, cfg = {}) {
     toast(`${a.name}去守${s.name}`);
     return true;
   }
-  function recallAlly(role) { const a = squad.find(m => m.role === role); if (a) { a.mode = { kind: 'follow' }; toast(`${a.name}返嚟跟你`); } }
+  function recallAlly(idx) { const a = squad[idx]; if (a) { a.mode = { kind: 'follow' }; toast(`${a.name}返嚟跟你`); } }
   function buildSquad(id) {
     const s = structs.find(k => k.id === id);
     if (!s?.alive || st.parts < BIG.squadCost || s.soldiers.length >= 6) return false;
@@ -342,19 +343,31 @@ export function createBigScene(map, cfg = {}) {
     return true;
   }
   // 指揮：推上／中／下路、守主城、集合、打 Boss（只影響冇派去守點嘅隊友）
-  function command(c) {
-    const free = squad.filter(m => m !== player && m.mode?.kind !== 'garrison');
+  // 指揮：idx = 揀咗邊個（只派佢，連守緊點嘅都會被叫走）；冇揀就派晒冇守點嘅隊友
+  function command(c, idx = -1) {
+    const free = idx > 0 ? [squad[idx]] : squad.filter(m => m !== player && m.mode?.kind !== 'garrison');
     const map2 = { top: { kind: 'lane', lane: 0 }, mid: { kind: 'lane', lane: 1 }, bot: { kind: 'lane', lane: 2 }, base: { kind: 'base' }, follow: { kind: 'follow' }, boss: { kind: 'boss' } };
     for (const a of free) a.mode = { ...map2[c] };
-    st.command = c;
+    if (idx > 0) toast(`${squad[idx].name}：${{ top: '推上路', mid: '推中路', bot: '推下路', base: '守主城', follow: '跟你', boss: '打 Boss' }[c]}`);
+    else st.command = c;
+  }
+  // 派一個人去地圖上某一點企住
+  function sendTo(idx, x, y) {
+    const a = squad[idx];
+    if (!a || a === player) return;
+    const p = map.nearestFree(x, y), flow = createFlowField(map);
+    flow.update([p]);
+    a.mode = { kind: 'point', x: p.x, y: p.y, flow };
+    toast(`${a.name}去指定位置`);
   }
   function recall() { if (player.state === 'ok' && !st.recall) { st.recall = BIG.recall; toast('回城中…唔好郁'); } }
   // 撳畫面：有冇撳中建築
+  // 返回 { struct: 撳中嘅建築 id 或者 null, x, y }（世界座標）
   function tap(sx, sy, W, H) {
     const x = cam.x + (sx - W / 2) / cam.z, y = cam.y + (sy - H / 2) / cam.z;
     let best = null, bd = 64;
     for (const s of structs) { const d = (s.x - x) ** 2 + (s.y - y) ** 2; if (s.alive && d < bd) { bd = d; best = s.id; } }
-    return best;
+    return { struct: best, x, y };
   }
   // 小地圖：鏡頭即刻飛去嗰點（fx、fy 係 0–1）
   function lookAt(fx, fy) {
@@ -415,6 +428,16 @@ export function createBigScene(map, cfg = {}) {
     for (const u of minions) if (vis(u.x, u.y)) { ctx.moveTo(u.x + 0.55, u.y); ctx.arc(u.x, u.y, 0.55, 0, TAU); }
     ctx.fillStyle = st.buffT > 0 ? '#d9a060' : '#a8865a'; ctx.fill();
     drawZombies(ctx, horde.zombies.filter(z => !z.static), vis, st.t);
+    // 派咗去指定位置：地上插旗；揀咗嘅人有白圈
+    for (const m of squad) {
+      if (m.state === 'dead') continue;
+      if (m.mode?.kind === 'point') {
+        ctx.strokeStyle = 'rgba(232,132,44,.6)'; ctx.lineWidth = 0.2; ctx.setLineDash([0.8, 0.8]);
+        ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.mode.x, m.mode.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#e8842c'; ctx.fillRect(m.mode.x, m.mode.y - 2.4, 0.2, 2.4); ctx.fillRect(m.mode.x + 0.2, m.mode.y - 2.4, 1.2, 0.8);
+      }
+      if (squad.indexOf(m) === st.sel) { ctx.strokeStyle = '#f1e9dc'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.arc(m.x, m.y, 1.5, 0, TAU); ctx.stroke(); }
+    }
     drawSquad(ctx, squad, player, vis);
     drawEffects(ctx, effects, false);
     if (st.isNight) {
@@ -433,25 +456,48 @@ export function createBigScene(map, cfg = {}) {
       mmBase = document.createElement('canvas'); mmBase.width = mmBase.height = S;
       const g = mmBase.getContext('2d'), k = S / map.size;
       g.fillStyle = '#1a1d19'; g.fillRect(0, 0, S, S);
-      g.strokeStyle = '#3a3c37'; g.lineWidth = 1; g.lineCap = 'round';
+      const f = S / 150;
+      g.strokeStyle = '#3a3c37'; g.lineWidth = f; g.lineCap = 'round';
       for (const r of map.roads) { g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(p[0] * k, p[1] * k) : g.moveTo(p[0] * k, p[1] * k))); g.stroke(); }
       g.strokeStyle = '#1f3442'; g.lineWidth = 42 * k;
       for (const r of map.rivers) { g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(p[0] * k, p[1] * k) : g.moveTo(p[0] * k, p[1] * k))); g.stroke(); }
-      g.strokeStyle = 'rgba(181,89,42,.7)'; g.lineWidth = 2;
+      g.strokeStyle = 'rgba(181,89,42,.55)'; g.lineWidth = 2 * f;
       for (const l of lanes) { g.beginPath(); l.pts.forEach((p, i) => (i ? g.lineTo(p.x * k, p.y * k) : g.moveTo(p.x * k, p.y * k))); g.stroke(); }
     }
-    const k = S / map.size;
+    const k = S / map.size, f = S / 150;
     ctx.drawImage(mmBase, 0, 0);
-    ctx.fillStyle = '#d94a3a';
-    for (const z of horde.zombies) if (!z.static) ctx.fillRect(z.x * k - 1, z.y * k - 1, z.type === 'king' || z.type === 'boss' ? 4 : 2, z.type === 'king' || z.type === 'boss' ? 4 : 2);
-    ctx.fillStyle = '#a8865a';
-    for (const u of minions) ctx.fillRect(u.x * k - 1, u.y * k - 1, 2, 2);
-    for (const z of horde.zombies) if (z.static) { ctx.fillStyle = z.invuln ? '#6a2a24' : '#d94a3a'; ctx.fillRect(z.x * k - 3, z.y * k - 3, 6, 6); }
-    for (const s of structs) { ctx.fillStyle = !s.alive ? '#333' : st.help.has(s.id) && Math.sin(st.t * 10) > 0 ? '#d94a3a' : '#e8842c'; ctx.fillRect(s.x * k - 3, s.y * k - 3, 6, 6); }
-    for (const c of camps) if (c.ready) { ctx.fillStyle = c.kind === 'supply' ? '#c07a45' : c.kind === 'survivor' ? '#d9d6cc' : '#7a3a30'; ctx.beginPath(); ctx.arc(c.x * k, c.y * k, 2.5, 0, TAU); ctx.fill(); }
-    if (!jboss.dead) { ctx.fillStyle = '#b3302a'; ctx.beginPath(); ctx.arc(jboss.x * k, jboss.y * k, 4, 0, TAU); ctx.fill(); }
-    for (const m of squad) if (m.state !== 'dead') { ctx.fillStyle = m === player ? '#f2c27a' : '#e8842c'; ctx.beginPath(); ctx.arc(m.x * k, m.y * k, m === player ? 3.5 : 2.5, 0, TAU); ctx.fill(); }
-    ctx.strokeStyle = '#d9d6cc'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#d94a3a'; // 喪屍：細紅點；屍王、野區 Boss 大啲
+    for (const z of horde.zombies) if (!z.static) { const s = (z.type === 'king' || z.type === 'boss' ? 4 : 2) * f; ctx.fillRect(z.x * k - s / 2, z.y * k - s / 2, s, s); }
+    ctx.fillStyle = '#a8865a'; // 我方小兵、守備兵
+    for (const u of minions) ctx.fillRect(u.x * k - f, u.y * k - f, 2 * f, 2 * f);
+    for (const z of horde.zombies) if (z.static) { const s = (z.type === 'nest' ? 10 : 7) * f; ctx.fillStyle = z.invuln ? '#6a2a24' : '#d94a3a'; ctx.fillRect(z.x * k - s / 2, z.y * k - s / 2, s, s); }
+    for (const s of structs) { // 我方建築：綠灰色方塊、橙邊；求救會閃紅
+      const sz = (s.kind === 'base' ? 10 : 7) * f;
+      ctx.fillStyle = !s.alive ? '#333' : st.help.has(s.id) && Math.sin(st.t * 10) > 0 ? '#d94a3a' : '#5d6b4f';
+      ctx.fillRect(s.x * k - sz / 2, s.y * k - sz / 2, sz, sz);
+      ctx.strokeStyle = '#e8842c'; ctx.lineWidth = f; ctx.strokeRect(s.x * k - sz / 2, s.y * k - sz / 2, sz, sz);
+    }
+    for (const c of camps) if (c.ready) { ctx.fillStyle = c.kind === 'supply' ? '#c07a45' : c.kind === 'survivor' ? '#d9d6cc' : '#7a3a30'; ctx.beginPath(); ctx.arc(c.x * k, c.y * k, 2.5 * f, 0, TAU); ctx.fill(); }
+    if (!jboss.dead) { ctx.fillStyle = '#b3302a'; ctx.beginPath(); ctx.arc(jboss.x * k, jboss.y * k, 4 * f, 0, TAU); ctx.fill(); }
+    // 隊員：大粒、有字，一眼睇到邊個喺邊；派咗去邊會有虛線
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const m of squad) {
+      if (m.state === 'dead' || m === player || m.mode?.kind !== 'point') continue;
+      ctx.strokeStyle = 'rgba(242,194,122,.8)'; ctx.lineWidth = f; ctx.setLineDash([2 * f, 2 * f]);
+      ctx.beginPath(); ctx.moveTo(m.x * k, m.y * k); ctx.lineTo(m.mode.x * k, m.mode.y * k); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#f2c27a'; ctx.fillRect(m.mode.x * k - f, m.mode.y * k - 5 * f, f, 5 * f); ctx.fillRect(m.mode.x * k, m.mode.y * k - 5 * f, 3 * f, 2 * f);
+    }
+    const order = [...squad.filter(m => m !== player), player]; // 你畫最上面
+    for (const m of order) {
+      if (m.state === 'dead') continue;
+      const x = m.x * k, y = m.y * k, r = (m === player ? 6 : 5) * f, i = squad.indexOf(m);
+      ctx.fillStyle = m.state === 'down' ? '#6b6560' : m === player ? '#f2c27a' : m.guest ? '#d9a060' : '#e8842c';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      ctx.lineWidth = (i === st.sel ? 2.2 : 1) * f; ctx.strokeStyle = i === st.sel ? '#ffffff' : '#1c1410'; ctx.stroke();
+      ctx.fillStyle = '#1c1410'; ctx.font = `900 ${7 * f}px "Noto Sans TC", sans-serif`;
+      ctx.fillText(m === player ? '你' : m.glyph || [...m.name].find(c => c !== '阿' && c !== '小' && c !== ' ') || m.name[0], x, y + 0.5 * f);
+    }
+    ctx.strokeStyle = '#d9d6cc'; ctx.lineWidth = f;
     ctx.strokeRect((cam.x - cam.hw) * k, (cam.y - cam.hh) * k, cam.hw * 2 * k, cam.hh * 2 * k);
   }
 
@@ -462,6 +508,7 @@ export function createBigScene(map, cfg = {}) {
     pickUpgrade() {}, idle() {},
     zoomBy: f => zoomCam(cam, f, 0.3, 2), setZoom: v => { cam.zoom = cam.zoomTarget = Math.max(0.3, Math.min(2, v || 1)); },
     nestHp: () => nest.hp / nest.maxHp,
+    size: map.size, sendTo, select: i => { st.sel = i; },
     outposts: () => horde.zombies.filter(z => z.type === 'outpost').length,
     nestOpen: () => !nest.invuln,
     counts: () => ({ zombies: horde.zombies.length, minions: minions.filter(u => u.kind === 'minion').length, soldiers: minions.filter(u => u.kind === 'soldier').length }),

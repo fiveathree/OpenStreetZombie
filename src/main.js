@@ -55,9 +55,22 @@ function zoom(f) {
   zoomSaved = scene.zoomBy(f);
   try { localStorage.setItem('osz-zoom', zoomSaved); } catch {}
 }
-const input = createInput(canvas, $('#stick'), zoom, (x, y) => { // 撳一下畫面：大地圖揀建築
-  if (mode === 'play' && scene?.kind === 'big') { const id = scene.tap(x, y, W, H); if (id) openDispatch(id); }
+const input = createInput(canvas, $('#stick'), zoom, (x, y) => { // 撳一下畫面（大地圖）：揀咗人就派佢去；冇揀人就開建築面板
+  if (mode !== 'play' || scene?.kind !== 'big') return;
+  const t = scene.tap(x, y, W, H);
+  if (sel > 0) { if (t.struct) scene.assign(t.struct, sel); else scene.sendTo(sel, t.x, t.y); }
+  else if (t.struct) openDispatch(t.struct);
 });
+// 大地圖：揀咗邊個隊友（squad 入面嘅位置；-1 = 冇揀）
+let sel = -1;
+function selectAlly(i) {
+  sel = sel === i ? -1 : i;
+  scene?.select?.(sel);
+  const hint = $('#selHint');
+  hint.hidden = sel < 0;
+  if (sel > 0) hint.textContent = `已揀 ${scene.squad[sel].name}：撳指揮掣、撳地圖或者小地圖派佢去（再撳佢名取消）`;
+  rows.forEach((r, k) => r.li.classList.toggle('sel', k === sel));
+}
 document.querySelectorAll('#zoom button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); zoom(b.dataset.z > 0 ? 1.25 : 0.8); }));
 
 // ---- 畫面切換 ----
@@ -168,6 +181,7 @@ async function start(id) {
   scene.setZoom?.(zoomSaved);
   setMode('play', scene.kind);
   ov.hidden = true;
+  sel = -1; $('#selHint').hidden = true;
   buildHud();
 }
 
@@ -248,9 +262,17 @@ function buildHud() {
 function buildSquadRows() {
   squadEl.innerHTML = scene.squad.map(m => `<li class="r-${m.role}${m.guest ? ' guest' : ''}"><b>${esc(m.name)}</b><span>${m.role === 'player' ? '' : esc(m.label) + (m.guest ? '・幫手' : ' Lv' + m.lvl)}</span><i><em></em></i><small></small></li>`).join('');
   rows = [...squadEl.children].map(li => ({ li, bar: li.querySelector('em'), note: li.querySelector('small') }));
+  rows.forEach((r, k) => r.li.classList.toggle('sel', k === sel));
 }
+squadEl.addEventListener('pointerdown', e => {
+  const li = e.target.closest('li');
+  if (!li || scene?.kind !== 'big' || mode !== 'play') return;
+  const i = [...squadEl.children].indexOf(li);
+  if (i > 0) { e.preventDefault(); selectAlly(i); }
+});
 function setCommand(c) {
   if (!scene?.command || mode === 'title') return;
+  if (scene.kind === 'big' && sel > 0) return scene.command(c, sel); // 淨係派揀咗嗰個
   scene.command(c);
   cmdsEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cmd === c));
 }
@@ -262,7 +284,7 @@ addEventListener('keydown', e => {
     if (e.key === '-' || e.key === '_') return zoom(0.8);
     if (e.code === 'Space' || e.code === 'KeyQ') { e.preventDefault(); return scene.ult(); }
     if (e.code === 'KeyB') return scene.recall?.();
-    if (e.key === 'Escape') return closeDispatch();
+    if (e.key === 'Escape') { if (sel > 0) selectAlly(sel); return closeDispatch(); }
     const list = CMDS[scene.kind] || [];
     const n = e.key && e.key.length === 1 ? '123456'.indexOf(e.key) : -1;
     if (n >= 0 && list[n]) setCommand(list[n][0]);
@@ -286,7 +308,7 @@ function renderDispatch() {
     <header><b>${esc(d.name)}</b><span>${Math.round(d.hp)}/${Math.round(d.maxHp)}</span><button class="x" data-do="close" aria-label="關閉">✕</button></header>
     <p>守點隊友 ${d.guards.length}/${d.cap}・守備兵 ${d.soldierN}・零件 ${d.parts}</p>
     <div class="dlist">${d.allies.map(a => `<div><b>${esc(a.name)}</b><span>${a.state !== 'ok' ? (a.state === 'dead' ? '復活中' : '倒地') : a.here ? '守緊呢度' : a.mode?.kind === 'garrison' ? '守緊第度' : '跟隊'}</span>
-      ${a.here ? `<button data-do="recall" data-r="${a.role}">召回</button>` : `<button data-do="assign" data-r="${a.role}" ${d.guards.length >= d.cap ? 'disabled' : ''}>派去守</button>`}</div>`).join('')}</div>
+      ${a.here ? `<button data-do="recall" data-r="${a.idx}">召回</button>` : `<button data-do="assign" data-r="${a.idx}" ${d.guards.length >= d.cap ? 'disabled' : ''}>派去守</button>`}</div>`).join('')}</div>
     <div class="drow"><button data-do="squad" ${d.parts >= BIG.squadCost && d.soldierN < 6 ? '' : 'disabled'}>造守備小隊（零件 ${BIG.squadCost}）</button><button data-do="upgrade" ${d.parts >= BIG.upgradeCost ? '' : 'disabled'}>升級（零件 ${BIG.upgradeCost}）</button></div>`;
   if (html !== dispEl._html) { dispEl.innerHTML = html; dispEl._html = html; }
 }
@@ -294,7 +316,7 @@ dispEl.addEventListener('pointerdown', e => {
   const b = e.target.closest('button');
   if (!b || b.disabled || !dispId) return;
   e.preventDefault();
-  const r = b.dataset.r;
+  const r = Number(b.dataset.r);
   switch (b.dataset.do) {
     case 'close': return closeDispatch();
     case 'assign': scene.assign(dispId, r); break;
@@ -313,7 +335,7 @@ mm.addEventListener('pointerdown', e => {
   if (scene?.kind !== 'big') return;
   mm.setPointerCapture(e.pointerId);
   mmDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-  scene.lookAt(...mmPos(e));
+  if (sel < 0) scene.lookAt(...mmPos(e)); // 揀咗人時，撳一下係派人，唔係移鏡頭
 });
 mm.addEventListener('pointermove', e => {
   if (!mmDrag || e.pointerId !== mmDrag.id) return;
@@ -322,7 +344,11 @@ mm.addEventListener('pointermove', e => {
 });
 const mmEnd = e => {
   if (!mmDrag || e.pointerId !== mmDrag.id) return;
-  if (!mmDrag.moved && e.type === 'pointerup') { const id = scene.tapMinimap(...mmPos(e)); if (id) openDispatch(id); }
+  if (!mmDrag.moved && e.type === 'pointerup') {
+    const [fx, fy] = mmPos(e), id = scene.tapMinimap(fx, fy);
+    if (sel > 0) { if (id) scene.assign(id, sel); else scene.sendTo(sel, fx * scene.size, fy * scene.size); }
+    else if (id) openDispatch(id);
+  }
   mmDrag = null;
 };
 mm.addEventListener('pointerup', mmEnd);
@@ -361,7 +387,7 @@ function hud(dt) {
     const r = rows[i]; if (!r) return;
     r.bar.style.width = (m.hp / m.maxHp) * 100 + '%';
     r.li.dataset.state = m.state;
-    const where = kind === 'big' && m.mode ? { follow: '', garrison: '守點', lane: '推路', boss: '打Boss', base: '守城' }[m.mode.kind] : '';
+    const where = kind === 'big' && m.mode ? { follow: '跟你', garrison: '守點', lane: ['推上路', '推中路', '推下路'][m.mode.lane], boss: '打Boss', base: '守城', point: '去指定點' }[m.mode.kind] : '';
     r.note.textContent = m.state === 'down' ? `倒地 ${Math.ceil(m.bleed)}` : m.state === 'dead' ? (kind === 'big' ? '復活中' : '陣亡') : m.ult >= 1 && m === p ? '大招✓' : where;
   });
   const ready = kind === 'street' ? s.ultReady : p && p.ult >= 1;
