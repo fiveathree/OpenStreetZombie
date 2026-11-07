@@ -305,12 +305,29 @@ dispEl.addEventListener('pointerdown', e => {
   renderDispatch();
 });
 const mm = $('#minimap'), mmCtx = mm.getContext('2d');
+// 小地圖：撳邊度鏡頭就去邊度睇（可以拖住移）；淨係撳一下而又撳中建築，就開派遣面板
+let mmDrag = null;
+const mmPos = e => { const r = mm.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
 mm.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (scene?.kind !== 'big') return;
-  const r = mm.getBoundingClientRect(), id = scene.tapMinimap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-  if (id) openDispatch(id);
+  mm.setPointerCapture(e.pointerId);
+  mmDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+  scene.lookAt(...mmPos(e));
 });
+mm.addEventListener('pointermove', e => {
+  if (!mmDrag || e.pointerId !== mmDrag.id) return;
+  if (Math.hypot(e.clientX - mmDrag.x, e.clientY - mmDrag.y) > 6) mmDrag.moved = true;
+  scene.lookAt(...mmPos(e));
+});
+const mmEnd = e => {
+  if (!mmDrag || e.pointerId !== mmDrag.id) return;
+  if (!mmDrag.moved && e.type === 'pointerup') { const id = scene.tapMinimap(...mmPos(e)); if (id) openDispatch(id); }
+  mmDrag = null;
+};
+mm.addEventListener('pointerup', mmEnd);
+mm.addEventListener('pointercancel', mmEnd);
+$('#lookBack').addEventListener('pointerdown', e => { e.preventDefault(); scene?.lookBack?.(); });
 
 let hudT = 0, toastT = 0;
 const toastQ = [];
@@ -331,6 +348,7 @@ function hud(dt) {
     $('#time').textContent = s.respawn ? '復活 ' + Math.ceil(s.respawn) : s.recall ? '回城 ' + s.recall.toFixed(1) : mmss(s.t);
     $('#v1').textContent = Math.floor(s.parts); $('#k2').textContent = scene.nestOpen() ? '巢穴' : '屍巢'; $('#v2').textContent = scene.nestOpen() ? Math.round(scene.nestHp() * 100) + '%' : scene.outposts() + '/3';
     if (dispId) renderDispatch();
+    $('#lookBack').hidden = !scene.isLooking();
   } else {
     $('#time').textContent = Math.round(s.s) + 'm';
     $('#v1').textContent = s.kills; $('#v2').textContent = s.shards;

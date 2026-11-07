@@ -38,6 +38,7 @@ export function createBigScene(map, cfg = {}) {
   const toast = m => st.toasts.push(m);
   const effect = e => effects.push(e);
   let killsThisFrame = 0;
+  let look = null; // 撳小地圖睇第度：鏡頭停喺嗰點，你一郁就返嚟
 
   // ---- 三條路：主城 → 橋 → 巢穴，用流場搵真實道路 ----
   const flow = createFlowField(map);
@@ -149,8 +150,9 @@ export function createBigScene(map, cfg = {}) {
     if (player.state === 'dead') {
       if (!st.respawn) st.respawn = BIG.respawn;
       st.respawn -= dt;
-      if (st.respawn <= 0) { st.respawn = 0; player.x = base.x; player.y = base.y; reviveMember(player, 1); toast('你喺主城復活'); }
+      if (st.respawn <= 0) { st.respawn = 0; player.x = base.x; player.y = base.y; reviveMember(player, 1); look = null; toast('你喺主城復活'); }
     }
+    if (mv.x || mv.y) look = null;
     if (player.state === 'ok' && (mv.x || mv.y)) {
       const sp = player.speed * bmul(player, 'speed');
       map.move(player, mv.x * sp * dt, mv.y * sp * dt);
@@ -354,6 +356,13 @@ export function createBigScene(map, cfg = {}) {
     for (const s of structs) { const d = (s.x - x) ** 2 + (s.y - y) ** 2; if (s.alive && d < bd) { bd = d; best = s.id; } }
     return best;
   }
+  // 小地圖：鏡頭即刻飛去嗰點（fx、fy 係 0–1）
+  function lookAt(fx, fy) {
+    const c = v => Math.max(0, Math.min(1, v)) * map.size;
+    look = { x: c(fx), y: c(fy) };
+    cam.x = look.x; cam.y = look.y;
+  }
+  function lookBack() { look = null; cam.x = player.x; cam.y = player.y; }
   function tapMinimap(fx, fy) {
     const x = fx * map.size, y = fy * map.size;
     let best = null, bd = 60 * 60;
@@ -365,7 +374,7 @@ export function createBigScene(map, cfg = {}) {
   function render(ctx, W, H, dpr, dt = 0) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#121518'; ctx.fillRect(0, 0, W, H);
-    const vis = applyCamera(ctx, cam, player, W, H, dpr, dt);
+    const vis = applyCamera(ctx, cam, look || player, W, H, dpr, dt);
     map.draw(ctx, cam.view);
     drawLabels(ctx, map.labels, cam, W, H, dpr, vis);
     worldTransform(ctx, cam, W, H, dpr);
@@ -448,7 +457,7 @@ export function createBigScene(map, cfg = {}) {
 
   return {
     kind: 'big', state: st, update, render, renderMinimap, squad, structs, lanes,
-    command, recall, tap, tapMinimap, info, assign, recallAlly, buildSquad, upgrade,
+    command, recall, tap, tapMinimap, lookAt, lookBack, isLooking: () => !!look, info, assign, recallAlly, buildSquad, upgrade,
     ult: () => castUlt(player, world),
     pickUpgrade() {}, idle() {},
     zoomBy: f => zoomCam(cam, f, 0.3, 2), setZoom: v => { cam.zoom = cam.zoomTarget = Math.max(0.3, Math.min(2, v || 1)); },
