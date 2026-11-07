@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- 分享圖產生器：用真遊戲畫面。開 tools/og.html，用無頭瀏覽器截 1200×630 存做 og.png（見 README）。
+     加 ?icon 就係 180×180 嘅 apple-touch-icon。 -->
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@600&family=Noto+Sans+TC:wght@500;900&display=swap">
+<style>
+  html, body { margin: 0; overflow: hidden; background: #121518; }
+  canvas { position: fixed; inset: 0; }
+  .t { position: fixed; left: 64px; bottom: 56px; font-family: "Noto Sans TC", sans-serif; color: #d9d6cc; }
+  .t::before { content: ""; position: absolute; top: -26px; left: 0; width: 120px; height: 20px; background: rgba(181, 89, 42, .9); transform: rotate(-3deg); }
+  .t p { margin: 0 0 6px; font: 600 20px "IBM Plex Mono", monospace; letter-spacing: .2em; color: #e8842c; }
+  .t h1 { margin: 0; font-size: 120px; font-weight: 900; line-height: 1; background: rgba(18, 21, 24, .82); padding: 6px 18px 12px 0; }
+  .t h1 em { font-style: normal; color: #e8842c; }
+  .t small { display: block; margin-top: 10px; font-size: 18px; color: #8b8f84; }
+  .icon .t { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="t"><p>高雄鹽埕區・撐住 5 分鐘</p><h1>屍城<em>戰線</em></h1><small>© OpenStreetMap contributors</small></div>
+<script type="module">
+import { loadMap } from '../src/map.js';
+import { createMidScene } from '../src/scenes/mid.js';
+import { rollUpgrades } from '../src/stats.js';
+const icon = location.search.includes('icon');
+if (icon) document.body.classList.add('icon');
+const W = icon ? 120 : 1200, H = icon ? 120 : 630, D = icon ? 1.5 : 1;
+const cv = document.getElementById('c'); cv.width = W * D; cv.height = H * D;
+const map = await loadMap('../data/yancheng.json');
+let seed = 7; Math.random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296); // 每次一樣
+const sc = createMidScene(map);
+const ctx = cv.getContext('2d');
+let a = 0;
+for (let i = 0; i < 125 * 60; i++) {
+  a += 0.004;
+  sc.update(1 / 60, { x: Math.cos(a) * 0.7, y: Math.sin(a) * 0.7 });
+  if (i % 30 === 0) sc.render(ctx, W, H, D, 0.5);
+  while (sc.state.pendingLevels > 0) sc.pickUpgrade(rollUpgrades(sc.squad)[0]);
+}
+sc.command('focus');
+for (let i = 0; i < 20; i++) { sc.update(1 / 60, { x: 0, y: 0 }); sc.render(ctx, W, H, D, 1); }
+document.title = 'ready';
+</script>
+</body>
+</html>

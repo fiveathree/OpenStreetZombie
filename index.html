@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>屍城戰線</title>
+<meta name="description" content="喪屍沿住高雄鹽埕區嘅真實街道湧過嚟。帶住三個隊友，撐夠 5 分鐘。">
+<meta name="theme-color" content="#121518">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="屍城戰線">
+<meta property="og:description" content="喪屍沿住真實街道湧過嚟。帶住三個隊友，撐夠 5 分鐘。">
+<meta property="og:image" content="https://fiveathree.github.io/OpenStreetZombie/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@600&family=Noto+Sans+TC:wght@500;900&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="xpbar"><i id="xp"></i></div>
+<ul id="squad" class="hud"></ul>
+<div id="stats" class="hud">
+  <div class="timer"><span>撐住</span><b id="time">05:00</b></div>
+  <div class="mini"><span>擊殺</span><b id="kills">0</b></div>
+  <div class="mini"><span>等級</span><b id="lvl">1</b></div>
+</div>
+<div id="cmds" class="hud">
+  <button data-cmd="follow"><b>跟我</b><kbd>1</kbd></button>
+  <button data-cmd="spread"><b>散開</b><kbd>2</kbd></button>
+  <button data-cmd="hold"><b>守住</b><kbd>3</kbd></button>
+  <button data-cmd="focus"><b>集火</b><kbd>4</kbd></button>
+</div>
+<div id="toast"></div>
+<div id="stick" hidden><i></i></div>
+<small id="osm">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</small>
+<div id="ov" class="ov"><div class="card" id="card"><p>載入緊地圖…</p></div></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
