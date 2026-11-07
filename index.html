@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>屍城戰線</title>
-<meta name="description" content="喪屍沿住高雄鹽埕區嘅真實街道湧過嚟。帶住三個隊友，撐夠 5 分鐘。">
+<meta name="description" content="喪屍沿住高雄鹽埕區嘅真實街道湧過嚟。帶住隊友打小、中、大三種地圖。">
 <meta name="theme-color" content="#121518">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta property="og:type" content="website">
 <meta property="og:title" content="屍城戰線">
-<meta property="og:description" content="喪屍沿住真實街道湧過嚟。帶住三個隊友，撐夠 5 分鐘。">
+<meta property="og:description" content="喪屍沿住真實街道湧過嚟。帶住隊友，打街道衝鋒、街區求生同愛河大戰。">
 <meta property="og:image" content="https://fiveathree.github.io/OpenStreetZombie/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -22,20 +22,33 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="xpbar"><i id="xp"></i></div>
-<ul id="squad" class="hud"></ul>
-<div id="stats" class="hud">
-  <div class="timer"><span>撐住</span><b id="time">05:00</b></div>
-  <div class="mini"><span>擊殺</span><b id="kills">0</b></div>
-  <div class="mini"><span>等級</span><b id="lvl">1</b></div>
+<div id="xpbar" class="hud m-mid"><i id="xp"></i></div>
+
+<!-- 中地圖、大地圖：隊伍 -->
+<ul id="squad" class="hud m-mid m-big"></ul>
+
+<!-- 右上數字 -->
+<div id="stats" class="hud m-mid m-big m-street">
+  <div class="timer"><span id="timeLabel">撐住</span><b id="time">05:00</b></div>
+  <div class="mini"><span id="k1">擊殺</span><b id="v1">0</b></div>
+  <div class="mini"><span id="k2">等級</span><b id="v2">1</b></div>
 </div>
-<div id="cmds" class="hud">
-  <button data-cmd="follow"><b>跟我</b><kbd>1</kbd></button>
-  <button data-cmd="spread"><b>散開</b><kbd>2</kbd></button>
-  <button data-cmd="hold"><b>守住</b><kbd>3</kbd></button>
-  <button data-cmd="focus"><b>集火</b><kbd>4</kbd></button>
+
+<!-- 小地圖：進度同隊長 -->
+<div id="progress" class="hud m-street"><span id="streetName"></span><i><em id="prog"></em></i><small id="crossName"></small></div>
+<div id="caps" class="hud m-street"></div>
+
+<!-- 大地圖：小地圖 -->
+<canvas id="minimap" class="hud m-big" width="150" height="150"></canvas>
+
+<div id="cmds" class="hud m-mid m-big"></div>
+<div id="side" class="hud m-mid m-big m-street">
+  <button id="ultBtn" class="ult"><b>大招</b><kbd>空白</kbd><i id="ultFill"></i></button>
+  <button id="recallBtn" class="m-only-big"><b>回城</b><kbd>B</kbd></button>
 </div>
-<div id="zoom" class="hud"><button data-z="1" aria-label="拉近">＋</button><button data-z="-1" aria-label="拉遠">－</button></div>
+<div id="zoom" class="hud m-mid m-big"><button data-z="1" aria-label="拉近">＋</button><button data-z="-1" aria-label="拉遠">－</button></div>
+
+<div id="dispatch" class="panel" hidden></div>
 <div id="toast"></div>
 <div id="stick" hidden><i></i></div>
 <small id="osm">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</small>

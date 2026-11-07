@@ -1,10 +1,10 @@
 // 操作：電腦 WASD／方向鍵、滑鼠轆 zoom；手機（或者滑鼠）喺畫面任何位置撳住拖就係虛擬搖桿，兩隻手指捏就 zoom
 const STICK_R = 48;
 
-export function createInput(canvas, stickEl, onZoom = () => {}) {
+export function createInput(canvas, stickEl, onZoom = () => {}, onTap = () => {}) {
   const keys = new Set();
   const pts = new Map(); // 撳緊嘅手指
-  let stick = null, pinch = 0;
+  let stick = null, pinch = 0, tap = null;
   addEventListener('keydown', e => keys.add(e.code));
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); pts.clear(); stick = null; pinch = 0; stickEl.hidden = true; });
@@ -15,6 +15,7 @@ export function createInput(canvas, stickEl, onZoom = () => {}) {
 
   canvas.addEventListener('pointerdown', e => {
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    tap = pts.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
     canvas.setPointerCapture(e.pointerId);
     if (pts.size === 2) { stopStick(); pinch = spread(); return; } // 第二隻手指：轉做捏
     if (pts.size > 1 || stick) return;
@@ -35,6 +36,8 @@ export function createInput(canvas, stickEl, onZoom = () => {}) {
     knob.style.transform = `translate(${dx}px,${dy}px)`;
   });
   const end = e => {
+    if (tap && e.type === 'pointerup' && performance.now() - tap.t < 300 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 10) onTap(e.clientX, e.clientY);
+    tap = null;
     pts.delete(e.pointerId);
     if (pts.size < 2) pinch = 0;
     if (stick && e.pointerId === stick.id) stopStick();

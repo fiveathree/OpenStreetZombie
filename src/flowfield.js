@@ -1,9 +1,8 @@
 // 共用流場圖：由目標點向外 BFS，成群喪屍（或者隊友）跟住「離目標越嚟越近」嘅鄰格行，
 // 唔使每隻自己計路。地圖最外一圈格一定行唔得（map.js 保證），所以唔使檢查出界。
-import { CELL } from './map.js';
 
 export function createFlowField(map) {
-  const { n, walk } = map;
+  const { n, walk, cell } = map;
   const dist = new Int32Array(n * n), q = new Int32Array(n * n);
   // 8 個方向：偏移、同埋斜行時要檢查嘅兩個直格（唔准斜切牆角）
   const OFF = [1, -1, n, -n, n + 1, -n + 1, n - 1, -n - 1];
@@ -37,9 +36,23 @@ export function createFlowField(map) {
       if (d >= 0 && d < best && (k < 4 || (walk[i + SX[k]] && walk[i + SY[k]]))) { best = d; bj = j; }
     }
     if (bj < 0) return null;
-    const vx = (bj % n + 0.5) * CELL - px, vy = (Math.floor(bj / n) + 0.5) * CELL - py, l = Math.hypot(vx, vy) || 1;
+    const vx = (bj % n + 0.5) * cell - px, vy = (Math.floor(bj / n) + 0.5) * cell - py, l = Math.hypot(vx, vy) || 1;
     return { x: vx / l, y: vy / l };
   }
 
-  return { dist, update, dir };
+  // 由 from 跟住流場行到目標，返回沿途嘅點（大地圖用嚟整三條路）
+  function trace(from, every = 3) {
+    let i = map.idx(from.x, from.y);
+    const pts = [];
+    for (let k = 0; i >= 0 && dist[i] > 0 && k < 100000; k++) {
+      if (k % every === 0) pts.push(map.cellCenter(i));
+      let best = dist[i], bj = -1;
+      for (let d = 0; d < 8; d++) { const j = i + OFF[d]; if (dist[j] >= 0 && dist[j] < best && (d < 4 || (walk[i + SX[d]] && walk[i + SY[d]]))) { best = dist[j]; bj = j; } }
+      i = bj;
+    }
+    if (i >= 0) pts.push(map.cellCenter(i));
+    return pts;
+  }
+
+  return { dist, update, dir, trace };
 }
