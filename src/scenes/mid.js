@@ -7,6 +7,7 @@ import { updateAlly } from '../ally-ai.js';
 import { castUlt, updateZones, drawZones } from '../skills.js';
 import { createPois, updatePois, drawPois } from '../poi.js';
 import { createNight } from '../lighting.js';
+import { rescue } from '../rescue.js';
 import { drawZombies, drawSquad, drawEffects, drawFocus, drawLabels, applyCamera, worldTransform, toScreen, makeCam, zoomCam } from '../draw.js';
 
 // cfg：{ team:[{role, lvl, injured}], night, hard, maxZombies, mapId }
@@ -21,7 +22,7 @@ export function createMidScene(map, cfg = {}) {
   const cam = makeCam(player.x, player.y);
   const holdPos = new Map();
   const night = cfg.night ? createNight() : null;
-  const st = { t: 0, kills: 0, level: 1, xp: 0, pendingLevels: 0, over: null, command: 'follow', focus: null, toasts: [], squad, loot, shards: 0, rescued: 0 };
+  const st = { t: 0, kills: 0, level: 1, xp: 0, pendingLevels: 0, over: null, command: 'follow', focus: null, toasts: [], squad, loot, shards: 0, rescued: 0, charShards: {} };
   let flowT = 0, flowTurn = false, spawnAcc = 0, surgeIdx = 0, follow = player, killsThisFrame = 0;
   const survivors = []; // 待救嘅倖存者
   const toast = m => st.toasts.push(m);
@@ -92,8 +93,8 @@ export function createMidScene(map, cfg = {}) {
         toast(s.boss ? '屍王嚟緊！' : '屍潮嚟緊！');
       }
     }
-    // 救人任務：倖存者喺 60 秒同 190 秒出現
-    for (const t of [60, 190]) if (st.t - dt < t && st.t >= t) {
+    // 救人任務：倖存者喺 50、130、210 秒出現
+    for (const t of [50, 130, 210]) if (st.t - dt < t && st.t >= t) {
       const at = pickSpawn(16, 28);
       if (at) { survivors.push({ ...at, prog: 0, life: 70 }); toast('附近有倖存者求救！（地圖上嘅白點）'); }
     }
@@ -101,7 +102,7 @@ export function createMidScene(map, cfg = {}) {
       s.life -= dt;
       const near = squad.some(m => m.state === 'ok' && Math.hypot(m.x - s.x, m.y - s.y) < 2.5);
       s.prog = near ? s.prog + dt / 2 : Math.max(0, s.prog - dt);
-      if (s.prog >= 1) { s.done = true; st.shards++; st.rescued++; loot.food += 8; loot.meds += 4; toast('救到倖存者！招募碎片 +1'); }
+      if (s.prog >= 1) { s.done = true; loot.food += 8; loot.meds += 4; rescue(st, squad, s, toast); }
       else if (s.life <= 0) { s.done = true; toast('倖存者冇救到…'); }
     }
     for (let i = survivors.length - 1; i >= 0; i--) if (survivors[i].done) survivors.splice(i, 1);

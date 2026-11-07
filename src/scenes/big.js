@@ -8,6 +8,7 @@ import { updateAlly } from '../ally-ai.js';
 import { castUlt, updateZones, drawZones } from '../skills.js';
 import { createPois, updatePois, drawPois } from '../poi.js';
 import { createNight } from '../lighting.js';
+import { rescue } from '../rescue.js';
 import { drawZombies, drawSquad, drawEffects, drawLabels, applyCamera, worldTransform, toScreen, makeCam, zoomCam } from '../draw.js';
 
 const TAU = Math.PI * 2;
@@ -33,7 +34,7 @@ export function createBigScene(map, cfg = {}) {
   const pois = createPois(map.pois);
   const cam = makeCam(player.x, player.y);
   const night = createNight();
-  const st = { t: 0, kills: 0, over: null, toasts: [], squad, loot, shards: 0, parts: BIG.startParts, level: 1, xp: 0, pendingLevels: 0, respawn: 0, recall: 0, help: new Set(), buffT: 0, isNight: false };
+  const st = { t: 0, kills: 0, over: null, toasts: [], squad, loot, shards: 0, parts: BIG.startParts, level: 1, xp: 0, pendingLevels: 0, respawn: 0, recall: 0, help: new Set(), buffT: 0, isNight: false, charShards: {} };
   const toast = m => st.toasts.push(m);
   const effect = e => effects.push(e);
   let killsThisFrame = 0;
@@ -208,7 +209,12 @@ export function createBigScene(map, cfg = {}) {
       if (c.prog >= 1) {
         c.ready = false; c.respawn = BIG.campEvery;
         if (c.kind === 'supply') { st.parts += 15; loot.food += 10; toast('拎到物資：零件 +15'); }
-        else { st.shards++; loot.food += 5; const s = structs.find(k => k.alive && k.soldiers.length < 6) || structs[0]; for (let k = 0; k < 2; k++) spawnMinion(-1, 'soldier', s, s); s.soldiers.push(...minions.slice(-2)); toast(`救到倖存者！變成${s.name}守備兵`); }
+        else {
+          loot.food += 5;
+          const joined = rescue(st, squad, c, toast); // 屍城日誌角色：有機會即刻跟你
+          if (joined) joined.mode = { kind: 'follow' };
+          else { const s = structs.find(k => k.alive && k.soldiers.length < 6) || structs[0]; for (let k = 0; k < 2; k++) spawnMinion(-1, 'soldier', s, s); s.soldiers.push(...minions.slice(-2)); toast(`其他被困嘅人變咗${s.name}守備兵`); }
+        }
       }
     }
 

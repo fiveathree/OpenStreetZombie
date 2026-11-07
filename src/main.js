@@ -4,8 +4,9 @@ import { createInput } from './input.js';
 import { createMidScene } from './scenes/mid.js';
 import { createStreetScene, pickStreet, TROOPS } from './scenes/street.js';
 import { createBigScene } from './scenes/big.js';
-import { MATCH_TIME, xpNeed, rollUpgrades, ROLES, HEROES, activeBonds, heroXpNeed, heroLevelCost, RES_NAMES, TREAT_COST, RECRUIT_SHARDS, ULT_BOOST_LEVEL, BIG } from './stats.js';
-import { loadSave, writeSave, resetSave, canLevel, levelUp, treat, recruit, unlockAll, applyResult } from './save.js';
+import { MATCH_TIME, xpNeed, rollUpgrades, activeBonds, heroXpNeed, heroLevelCost, RES_NAMES, TREAT_COST, ULT_BOOST_LEVEL, BIG } from './stats.js';
+import { loadSave, writeSave, resetSave, canLevel, levelUp, treat, recruit, canRecruit, recruitNeed, owned, unlockAll, applyResult } from './save.js';
+import { loadCast, hero, castList, CORE, rollSurvivor, factionBonds } from './heroes.js';
 
 const $ = s => document.querySelector(s);
 const canvas = $('#c'), ctx = canvas.getContext('2d', { alpha: false });
@@ -26,6 +27,7 @@ const CMDS = {
   big: [['top', '推上路'], ['mid', '推中路'], ['bot', '推下路'], ['base', '守主城'], ['follow', '集合'], ['boss', '打 Boss']],
 };
 
+await loadCast(); // 屍城日誌角色
 let save = loadSave();
 let W = 0, H = 0, dpr = 1;
 function resize() {
@@ -78,31 +80,42 @@ function showTitle() {
 }
 
 // ---- 安全屋 ----
-function teamRoles() { return save.team.filter(r => save.heroes[r]?.owned).slice(0, 3); }
+const ROLE_LABEL = { tank: '坦克', medic: '醫療', dps: '輸出', control: '控場', support: '支援' };
+function teamIds() { return save.team.filter(id => save.heroes[id]?.owned && hero(id)).slice(0, 3); }
 function showSafehouse(msg) {
   setMode('safe');
-  const team = teamRoles();
-  const bonds = activeBonds(team);
+  const team = teamIds();
+  const bonds = [...activeBonds(team).map(b => b.name), ...factionBonds(team).map(f => `陣營：${f.name}`)];
   const street = maps.big ? pickStreet(maps.big, day).name : '今日嘅街';
-  const resRow = Object.entries(RES_NAMES).map(([k, n]) => `<div><span>${n}</span><b>${save.res[k]}</b></div>`).join('') + `<div><span>碎片</span><b>${save.shards}</b></div>`;
-  const heroCard = r => {
-    const h = save.heroes[r], R = ROLES[r], on = team.includes(r), need = heroXpNeed(h.lvl), cost = heroLevelCost(h.lvl);
-    if (!h.owned) return `<div class="hero locked"><b>${R.name}</b><span>${R.job}・${R.label}</span><small>未招募</small><button data-act="recruit" data-r="${r}" ${save.shards >= RECRUIT_SHARDS ? '' : 'disabled'}>招募（碎片 ${RECRUIT_SHARDS}）</button></div>`;
-    return `<div class="hero ${on ? 'on' : ''}" data-act="pick" data-r="${r}">
-      <b>${R.name} <em>Lv${h.lvl}</em></b><span>${R.job}・${R.label}${h.lvl >= ULT_BOOST_LEVEL ? '・大招強化' : ''}</span>
+  const resRow = Object.entries(RES_NAMES).map(([k, n]) => `<div><span>${n}</span><b>${save.res[k]}</b></div>`).join('') + `<div><span>通用碎片</span><b>${save.shards}</b></div>`;
+  const tag = H => `${H.rarity ? `<i class="rar r-${H.rarity}">${H.rarity}</i>` : ''}`;
+  const teamCard = id => {
+    const H = hero(id), h = save.heroes[id], need = heroXpNeed(h.lvl), cost = heroLevelCost(h.lvl);
+    return `<div class="hero on" data-act="drop" data-r="${id}">
+      <b>${tag(H)}${esc(H.name)} <em>Lv${h.lvl}</em></b><span>${esc(H.job)}・${ROLE_LABEL[H.role]}${H.core ? '' : '・屍城日誌'}${h.lvl >= ULT_BOOST_LEVEL ? '・大招強化' : ''}</span>
       <i class="bar"><em style="width:${Math.min(100, h.xp / need * 100)}%"></em></i>
-      ${h.injured ? `<small class="hurt">受傷：血 −30%</small><button data-act="treat" data-r="${r}" ${save.res.meds >= TREAT_COST.meds ? '' : 'disabled'}>醫好（藥品 ${TREAT_COST.meds}）</button>` : ''}
-      ${h.xp >= need ? `<button data-act="level" data-r="${r}" ${canLevel(save, r) ? '' : 'disabled'}>升級（食物 ${cost.food}、藥品 ${cost.meds}）</button>` : `<small>經驗 ${h.xp}/${need}</small>`}
+      ${h.injured ? `<small class="hurt">受傷：血 −30%</small><button data-act="treat" data-r="${id}" ${save.res.meds >= TREAT_COST.meds ? '' : 'disabled'}>醫好（藥品 ${TREAT_COST.meds}）</button>` : ''}
+      ${h.xp >= need ? `<button data-act="level" data-r="${id}" ${canLevel(save, id) ? '' : 'disabled'}>升級（食物 ${cost.food}、藥品 ${cost.meds}）</button>` : `<small>經驗 ${h.xp}/${need}</small>`}
     </div>`;
   };
+  const empty = `<div class="hero empty"><span>撳下面嘅人加入</span></div>`;
+  const reserve = owned(save).filter(id => !team.includes(id)).sort((a, b) => save.heroes[b].lvl - save.heroes[a].lvl);
+  const chip = id => { const H = hero(id), h = save.heroes[id]; return `<button class="chip" data-act="pick" data-r="${id}">${tag(H)}${esc(H.name)}<span>${ROLE_LABEL[H.role]} Lv${h.lvl}${h.injured ? '・傷' : ''}</span></button>`; };
+  const recruitable = Object.keys(save.heroes).filter(id => hero(id) && !save.heroes[id].owned && (save.heroes[id].shards > 0 || CORE[id]))
+    .sort((a, b) => (save.heroes[b].shards / recruitNeed(b)) - (save.heroes[a].shards / recruitNeed(a)));
+  const rchip = id => { const H = hero(id), h = save.heroes[id], need = recruitNeed(id); return `<button class="chip rec" data-act="recruit" data-r="${id}" ${canRecruit(save, id) ? '' : 'disabled'} title="${esc(H.bio || H.job)}">${tag(H)}${esc(H.name)}<span>${ROLE_LABEL[H.role]}・碎片 ${h.shards}/${need}</span></button>`; };
+  const zbOwned = owned(save).filter(id => !CORE[id]).length;
   const mission = (id, title, desc, ok, why) => `<button class="mission" data-go="${id}" ${ok ? '' : 'disabled'}><b>${title}</b><span>${ok ? desc : why}</span></button>`;
   card.className = 'card wide';
   card.innerHTML = `
     <p class="eyebrow">安全屋・第 ${save.runs + 1} 次出擊</p>
     <div class="res">${resRow}</div>
-    <h3>隊伍（揀 3 個；大地圖會多帶 1 個）</h3>
-    <div class="heroes">${HEROES.map(heroCard).join('')}</div>
-    <p class="bonds">${bonds.length ? '羈絆：' + bonds.map(b => `<b>${b.name}</b>`).join('、') : '羈絆：未有（試下消防員＋化學老師）'}</p>
+    <h3>出擊隊伍（3 個；大地圖會多帶 1 個後備）</h3>
+    <div class="heroes">${team.map(teamCard).join('')}${empty.repeat(Math.max(0, 3 - team.length))}</div>
+    <p class="bonds">${bonds.length ? '羈絆：' + bonds.map(b => `<b>${esc(b)}</b>`).join('、') : '羈絆：未有（例如消防員＋化學老師，或者兩個同陣營）'}</p>
+    ${reserve.length ? `<div class="chips"><small>後備</small>${reserve.slice(0, 12).map(chip).join('')}</div>` : ''}
+    ${recruitable.length ? `<div class="chips"><small>招募</small>${recruitable.slice(0, 8).map(rchip).join('')}</div>` : ''}
+    <p class="tiny">屍城日誌角色：已招募 ${zbOwned}/${castList().length}。救倖存者有佢哋嘅專屬碎片，運氣好仲會即刻加入幫手。</p>
     <h3>出擊</h3>
     <div class="missions">
       ${mission('street', '小地圖：街道衝鋒', `今日：${esc(street)}・1–2 分鐘・賺資源同碎片`, true)}
@@ -115,35 +128,34 @@ function showSafehouse(msg) {
   ov.hidden = false;
   card.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', e => {
     e.stopPropagation();
-    const r = el.dataset.r, act = el.dataset.act;
-    if (act === 'pick') {
-      const t = save.team.filter(x => save.heroes[x]?.owned);
-      save.team = t.includes(r) ? t.filter(x => x !== r) : [...t, r].slice(-3);
-      writeSave(save);
-    } else if (act === 'level') levelUp(save, r);
-    else if (act === 'treat') treat(save, r);
-    else if (act === 'recruit') recruit(save, r);
+    const id = el.dataset.r, act = el.dataset.act;
+    if (act === 'pick') { save.team = [...teamIds(), id].slice(-3); writeSave(save); }
+    else if (act === 'drop') { save.team = teamIds().filter(x => x !== id); writeSave(save); }
+    else if (act === 'level') levelUp(save, id);
+    else if (act === 'treat') treat(save, id);
+    else if (act === 'recruit') { if (recruit(save, id)) { save.team = [...teamIds(), id].slice(-3); writeSave(save); return showSafehouse(`${esc(hero(id).name)} 加入咗！`); } }
     showSafehouse();
   }));
   card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => start(b.dataset.go));
-  $('#cheat').onclick = () => { unlockAll(save); showSafehouse('已經全部解鎖，資源加到 300。'); };
+  $('#cheat').onclick = () => { unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
   $('#wipe').onclick = () => { if (confirm('重置存檔？所有進度會清走。')) { save = resetSave(); showSafehouse('存檔已重置。'); } };
 }
 
 // ---- 開波 ----
 async function start(id) {
-  const team = teamRoles();
+  const team = teamIds();
   if (team.length < 1) { showSafehouse('最少要揀 1 個隊友。'); return; }
   card.innerHTML = '<p>載入緊地圖…</p>';
-  const spec = r => ({ role: r, lvl: save.heroes[r].lvl, injured: save.heroes[r].injured });
+  const spec = hid => ({ role: hero(hid).role, heroId: hid, name: hero(hid).name, lvl: save.heroes[hid].lvl, injured: save.heroes[hid].injured });
+  const rescueRoll = () => rollSurvivor(new Set(owned(save)));
   try {
     if (id === 'street') {
       const map = await getMap('big');
-      scene = createStreetScene(map, { day, captains: team.map(spec) });
+      scene = createStreetScene(map, { day, captains: team.map(spec), rescue: rescueRoll });
       runInfo = { id, kind: 'street', team };
     } else if (id === 'big') {
       const map = await getMap('big');
-      const extra = HEROES.filter(r => save.heroes[r].owned && !team.includes(r)).slice(0, 1);
+      const extra = owned(save).filter(r => !team.includes(r) && !save.heroes[r].injured).slice(0, 1);
       const four = [...team, ...extra];
       scene = createBigScene(map, { team: [{ role: 'player' }, ...four.map(spec)], maxZombies: mobile ? 200 : 280 });
       runInfo = { id, kind: 'big', team: four };
@@ -181,16 +193,19 @@ function showEnd() {
   const s = scene.state, win = s.over === 'win', kind = scene.kind;
   setMode('end');
   closeDispatch();
+  const members = kind === 'street' ? [] : scene.squad.filter(m => m.role !== 'player');
   const squadOut = kind === 'street'
-    ? scene.caps.map(c => ({ role: c.role, state: 'ok' })) // 小地圖唔會受傷
-    : scene.squad.map(m => ({ role: m.role, state: kind === 'big' ? ((m.deaths || 0) >= 2 ? 'dead' : 'ok') : m.state }));
+    ? scene.caps.map(c => ({ heroId: c.heroId, state: 'ok' })) // 小地圖唔會受傷
+    : members.filter(m => !m.guest).map(m => ({ heroId: m.heroId, state: kind === 'big' ? ((m.deaths || 0) >= 2 ? 'dead' : 'ok') : m.state }));
+  const recruits = members.filter(m => m.guest && m.state !== 'dead' && (kind !== 'big' || (m.deaths || 0) < 2)).map(m => m.heroId); // 即時加入又捱到最後：正式入隊
   const xp = kind === 'street' ? 30 + s.kills * 0.2 : kind === 'big' ? (win ? 200 : 80) + s.kills * 0.1 : (win ? 80 : 30) + s.kills * 0.05;
   const loot = { ...s.loot };
   if (kind === 'mid' && win) { loot.food += 30; loot.meds += 12; loot.parts += 15; loot.ammo += 15; }
   if (kind === 'big' && win) { loot.food += 80; loot.meds += 40; loot.parts += 50; loot.ammo += 50; }
   const shards = (s.shards || 0) + (kind === 'big' && win ? 3 : 0);
-  const got = applyResult(save, { mode: kind, win, loot, shards, xp: Math.round(xp), squad: squadOut, mapId: kind === 'mid' ? runInfo.id : kind === 'big' ? 'big' : null, street: kind === 'street' && win ? 1 : 0 });
-  const hurtNow = squadOut.filter(m => m.state === 'dead' && m.role !== 'player').map(m => ROLES[m.role].name);
+  const { got, joined } = applyResult(save, { win, loot, shards, charShards: s.charShards, recruits, xp: Math.round(xp), squad: squadOut, mapId: kind === 'mid' ? runInfo.id : kind === 'big' ? 'big' : null, street: kind === 'street' && win ? 1 : 0 });
+  const hurtNow = squadOut.filter(m => m.state === 'dead').map(m => hero(m.heroId)?.name).filter(Boolean);
+  const found = Object.entries(s.charShards || {}).map(([id, n]) => `${hero(id)?.name}（${hero(id)?.rarity}）×${n}`);
   const title = kind === 'street' ? (win ? `衝到 ${esc(s.street)} 街尾！` : '小隊全滅') : kind === 'big' ? (win ? '打爆咗喪屍巢穴！愛河兩岸安全' : '主城失守') : (win ? `過關！${esc(MIDS[runInfo.id].name)}暫時安全` : '全軍覆沒');
   const stat = kind === 'street' ? `<div><span>跑咗</span><b>${Math.round(s.s)} 米</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`
     : `<div><span>${kind === 'big' ? '打咗' : '撐咗'}</span><b>${mmss(s.t)}</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`;
@@ -198,8 +213,10 @@ function showEnd() {
   card.innerHTML = `
     <p class="eyebrow">${win ? '任務完成' : '任務失敗・資源只帶返一半'}</p>
     <h2>${title}</h2>
-    <div class="res">${stat}${Object.entries(got).filter(([, v]) => v).map(([k, v]) => `<div><span>${RES_NAMES[k]}</span><b>+${v}</b></div>`).join('')}${shards ? `<div><span>碎片</span><b>+${shards}</b></div>` : ''}</div>
-    <p>每個隊友經驗 +${Math.round(xp)}。${hurtNow.length ? `受傷：${hurtNow.join('、')}（下一場抖一場，或者帶傷上陣）` : ''}</p>
+    <div class="res">${stat}${Object.entries(got).filter(([, v]) => v).map(([k, v]) => `<div><span>${RES_NAMES[k]}</span><b>+${v}</b></div>`).join('')}${shards ? `<div><span>通用碎片</span><b>+${shards}</b></div>` : ''}</div>
+    <p>每個隊友經驗 +${Math.round(xp)}。${hurtNow.length ? `受傷：${esc(hurtNow.join('、'))}（下一場抖一場，或者帶傷上陣）` : ''}</p>
+    ${found.length ? `<p>救到嘅屍城日誌角色（專屬碎片）：${esc(found.join('、'))}</p>` : ''}
+    ${joined.length ? `<p class="msg">正式入隊：${esc(joined.map(id => hero(id).name).join('、'))}！</p>` : ''}
     ${kind === 'mid' && win && runInfo.id === 'yancheng' && !save.cleared.qixian ? '<p class="msg">解鎖咗鄰近街區：七賢路！</p>' : ''}
     ${kind === 'mid' && win && runInfo.id === 'qixian' ? '<p class="msg">兩個街區都佔領咗：大地圖「愛河大戰」開放！</p>' : ''}
     <button class="go" id="go">返安全屋</button>`;
@@ -217,8 +234,7 @@ function buildHud() {
   cmdsEl.querySelectorAll('button').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); setCommand(b.dataset.cmd); }));
   cmdsEl.dataset.n = (CMDS[kind] || []).length;
   if (kind !== 'street') {
-    squadEl.innerHTML = scene.squad.map(m => `<li class="r-${m.role}"><b>${esc(m.name)}</b><span>${m.role === 'player' ? '' : esc(m.label) + ' Lv' + m.lvl}</span><i><em></em></i><small></small></li>`).join('');
-    rows = [...squadEl.children].map(li => ({ li, bar: li.querySelector('em'), note: li.querySelector('small') }));
+    buildSquadRows();
     setCommand(kind === 'big' ? 'follow' : 'follow');
   } else {
     capsEl.innerHTML = scene.caps.map((c, i) => `<button data-i="${i}"><b>${esc(c.name)}</b><span>${TROOPS[c.role].name}</span><em>0</em></button>`).join('') + '<small>撳隊長：門嘅效果加落邊隊</small>';
@@ -228,6 +244,10 @@ function buildHud() {
   $('#timeLabel').textContent = kind === 'mid' ? '撐住' : kind === 'big' ? '時間' : '距離';
   $('#k1').textContent = kind === 'big' ? '零件' : '擊殺';
   $('#k2').textContent = kind === 'big' ? '巢穴' : kind === 'street' ? '碎片' : '等級';
+}
+function buildSquadRows() {
+  squadEl.innerHTML = scene.squad.map(m => `<li class="r-${m.role}${m.guest ? ' guest' : ''}"><b>${esc(m.name)}</b><span>${m.role === 'player' ? '' : esc(m.label) + (m.guest ? '・幫手' : ' Lv' + m.lvl)}</span><i><em></em></i><small></small></li>`).join('');
+  rows = [...squadEl.children].map(li => ({ li, bar: li.querySelector('em'), note: li.querySelector('small') }));
 }
 function setCommand(c) {
   if (!scene?.command || mode === 'title') return;
@@ -307,6 +327,7 @@ function hud(dt) {
     $('#crossName').textContent = s.cross ? '路口：' + s.cross : '';
     [...capsEl.querySelectorAll('button')].forEach((b, i) => { const c = scene.caps[i]; b.querySelector('em').textContent = c.alive ? c.n + (c.tier > 1 ? ' ★' + c.tier : '') : '倒下'; b.classList.toggle('on', s.target === i); b.classList.toggle('dead', !c.alive); });
   }
+  if (kind !== 'street' && rows.length !== scene.squad.length) buildSquadRows(); // 有倖存者加入
   if (kind !== 'street') scene.squad.forEach((m, i) => {
     const r = rows[i]; if (!r) return;
     r.bar.style.width = (m.hp / m.maxHp) * 100 + '%';

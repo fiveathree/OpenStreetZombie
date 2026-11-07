@@ -1,11 +1,12 @@
 // 小地圖場景：一條真實街道就係一條跑道。小隊沿街向前衝，左右拖揀行邊邊；
-// 真實路口有門（加人、乘人、減人、武器），喪屍由真實橫街湧出嚟，街尾有屍王同倖存者。
+// 真實路口有門（射得嘅加人門、乘人、減人、武器），喪屍由真實橫街同騎樓湧出嚟；路上有油桶、物資箱、被困倖存者；街尾有屍王。
 import { ROLES, levelMul } from '../stats.js';
 
 const TAU = Math.PI * 2;
 const LANE = 16;          // 跑道闊（米）
 const SPEED = 7.5;        // 向前衝速度（米／秒）
 const MAX_LEN = 760;      // 最長跑幾遠
+const CAP_MAX = 50;       // 每隊最多幾多兵
 
 // 隊長職業 → 小兵武器
 export const TROOPS = {
@@ -100,91 +101,139 @@ function signsAlong(map, street) {
   return out;
 }
 
-// cfg：{ captains:[{role, lvl}], day }
+// cfg：{ captains:[{ role, heroId, name, lvl }], day, rescue() }
 export function createStreetScene(map, cfg = {}) {
   const street = pickStreet(map, cfg.day || 0);
   const L = Math.min(MAX_LEN, street.len);
   const juncs = junctions(map, street).filter(j => j.s > 40 && j.s < L - 70);
   const signs = signsAlong(map, street).filter(s => s.s < L);
   const effects = [];
-  const st = { t: 0, s: 0, x: 0, kills: 0, over: null, toasts: [], loot: { food: 0, meds: 0, parts: 0, ammo: 0 }, shards: 0, target: -1, ultReady: false, street: street.name, len: L, cross: '' };
+  const st = {
+    t: 0, s: 0, x: 0, kills: 0, over: null, toasts: [], loot: { food: 0, meds: 0, parts: 0, ammo: 0 }, shards: 0, charShards: {},
+    target: -1, ult: 0, ultReady: false, street: street.name, len: L, cross: '', freed: 0,
+  };
   const toast = m => st.toasts.push(m);
+  const R = (a, b) => a + Math.random() * (b - a);
 
-  const capRoles = (cfg.captains || [{ role: 'tank' }, { role: 'dps' }, { role: 'medic' }]).slice(0, 3);
-  const caps = capRoles.map((c, i) => ({
-    role: c.role, name: ROLES[c.role].name, troop: TROOPS[c.role], lvl: c.lvl || 1,
-    off: (i - (capRoles.length - 1) / 2) * 5, n: 6, tier: 1, hp: 100 * levelMul(c.lvl || 1), maxHp: 100 * levelMul(c.lvl || 1), alive: true, fireT: 0, regenT: 0, start: 6,
+  const capList = (cfg.captains || [{ role: 'tank' }, { role: 'dps' }, { role: 'medic' }]).slice(0, 3);
+  const caps = capList.map((c, i) => ({
+    role: c.role, heroId: c.heroId, name: c.name || ROLES[c.role].name, troop: TROOPS[c.role], lvl: c.lvl || 1,
+    off: (i - (capList.length - 1) / 2) * 5, n: 8, tier: 1, hp: 100 * levelMul(c.lvl || 1), maxHp: 100 * levelMul(c.lvl || 1), alive: true, fireT: 0, regenT: 0, start: 8,
   }));
   st.caps = caps;
 
-  // 門：每個路口前面一對，一邊一隻
-  const KINDS = [['+', 5], ['+', 8], ['×', 2], ['−', 3], ['−', 5], ['槍', 1], ['+', 3]];
+  // ---- 門：每個路口前面一對，路口之間都有；「＋」「−」門可以射，數字會升 ----
+  const KINDS = [['+', 3], ['+', 5], ['×', 2], ['−', 4], ['−', 8], ['槍', 1], ['+', 2], ['×', 3]];
+  const pickKind = () => { const k = KINDS[(Math.random() * KINDS.length) | 0]; return { op: k[0], v: k[1], dmg: 0 }; };
   const gates = [];
-  for (const j of juncs) {
-    const pick = () => KINDS[(Math.random() * KINDS.length) | 0];
-    let a = pick(), b = pick();
-    if (a[0] === '−' && b[0] === '−') b = ['+', 4];
-    gates.push({ s: j.s - 14, left: a, right: b, used: false });
+  const addGate = s => { const a = pickKind(); let b = pickKind(); if (a.op === '−' && b.op === '−') b = { op: '+', v: 2, dmg: 0 }; gates.push({ s, left: a, right: b, used: false }); };
+  for (const j of juncs) addGate(j.s - 14);
+  for (let s = 55; s < L - 90; s += 55) if (!gates.some(g => Math.abs(g.s - s) < 25)) addGate(s);
+
+  // ---- 路上嘢：廢車、路障、油桶、物資箱、被困倖存者（全部可以射）----
+  const items = [];
+  const clear = s => !gates.some(g => Math.abs(g.s - s) < 10) && !juncs.some(j => Math.abs(j.s - s) < 8);
+  for (let s = 45; s < L - 80; s += R(9, 16)) {
+    if (!clear(s)) continue;
+    const k = Math.random(), u = R(-LANE / 2 + 2, LANE / 2 - 2);
+    if (k < 0.25) items.push({ kind: 'car', s, u, w: R(2, 3), h: 4.2, hp: 90 });
+    else if (k < 0.35) items.push({ kind: 'block', s, u, w: 3, h: 1.2, hp: 60 });
+    else if (k < 0.6) items.push({ kind: 'barrel', s, u, w: 1.2, h: 1.2, hp: 30 });
+    else if (k < 0.78) items.push({ kind: 'crate', s, u, w: 1.8, h: 1.8, hp: 90 + s / 5 });
+    else if (k < 0.9) items.push({ kind: 'cage', s, u, w: 2.2, h: 2.2, hp: 70 + s / 8 });
   }
-  // 障礙：廢車、路障
-  const obstacles = [];
-  for (let s = 70; s < L - 80; s += 26 + Math.random() * 30) {
-    if (juncs.some(j => Math.abs(j.s - s) < 20)) continue;
-    obstacles.push({ s, u: (Math.random() - 0.5) * (LANE - 4), w: 2 + Math.random() * 1.5, h: 4.2, hp: 60, kind: Math.random() < 0.7 ? 'car' : 'block' });
-  }
+  for (const it of items) it.max = it.hp;
   const zombies = [];
-  const spawnZ = (s, u, type = 'walker', hp = 30) => zombies.push({ s, u, hp, maxHp: hp, type, r: type === 'boss' ? 1.8 : 0.6, speed: type === 'boss' ? 2 : type === 'runner' ? 4.5 : 2.2, flash: 0, wob: Math.random() * TAU, side: 0 });
-  // 街上本身有啲散屍
-  for (let s = 50; s < L - 60; s += 9) if (Math.random() < 0.5) spawnZ(s, (Math.random() - 0.5) * (LANE - 2), 'walker', 26 + s / 20);
-  let bossSpawned = false, boss = null, finished = false;
+  const spawnZ = (s, u, type = 'walker', hp = 30, side = 0) => {
+    const big = type === 'boss' || type === 'brute';
+    zombies.push({ s, u, hp, maxHp: hp, type, r: type === 'boss' ? 1.8 : type === 'brute' ? 1.2 : 0.6, speed: big ? 2 : type === 'runner' ? 4.5 : 2.2, flash: 0, wob: Math.random() * TAU, side });
+  };
+  const troops = () => caps.reduce((a, c) => a + (c.alive ? c.n : 0), 0);
+  const zHp = s => (26 + s / 9) * (1 + troops() / 90); // 兵越多，屍越硬
+  let bossSpawned = false, boss = null, finished = false, nextRow = 30, nextAmbush = 9, nextBrute = 160;
   const jDone = new Set();
+  const later = []; // 連環爆：下一格先爆
 
   const groupPos = c => ({ s: st.s, u: st.x + c.off });
   const groupR = c => 0.8 + Math.sqrt(c.n) * 0.42;
+  const pickCap = () => { const c = caps[st.target]; return c && c.alive ? c : caps.filter(k => k.alive).sort((a, b) => a.n - b.n)[0]; };
 
   function applyGate(g, side) {
-    const [op, v] = side < 0 ? g.left : g.right;
-    let c = caps[st.target];
-    if (!c || !c.alive) c = caps.filter(k => k.alive).sort((a, b) => a.n - b.n)[0];
+    const k = side < 0 ? g.left : g.right, c = pickCap();
     if (!c) return;
-    if (op === '+') c.n += v;
-    else if (op === '×') c.n = Math.min(60, c.n * v);
-    else if (op === '−') c.n = Math.max(0, c.n - v);
-    else if (op === '槍') { c.tier++; st.loot.parts += 3; }
-    toast(`${c.name}隊 ${op === '槍' ? '換新武器！' : op + v}`);
+    if (k.op === '+') c.n = Math.min(CAP_MAX, c.n + k.v);
+    else if (k.op === '×') c.n = Math.min(CAP_MAX, c.n + Math.min(30, c.n * (k.v - 1)));
+    else if (k.op === '−') c.n = Math.max(0, c.n - k.v);
+    else if (k.op === '槍') { c.tier++; st.loot.parts += 3; }
+    effects.push({ kind: 'pop', s: g.s, u: side * LANE / 4, t: 0.5, life: 0.5, good: k.op !== '−' });
+    toast(`${c.name}隊 ${k.op === '槍' ? '換新武器！' : k.op + k.v}`);
+  }
+  function blast(s, u, r, dmg) {
+    effects.push({ kind: 'blast', s, u, r, t: 0.5, life: 0.5 });
+    for (const z of zombies) if (Math.hypot(z.s - s, z.u - u) < r + z.r) { z.hp -= dmg; z.flash = 0.15; }
+    for (const it of items) if (it.hp > 0 && it.kind === 'barrel' && Math.hypot(it.s - s, it.u - u) < r) { it.hp = 0; later.push(() => breakItem(it)); }
+  }
+  function breakItem(it) {
+    if (it.broken) return;
+    it.broken = true; it.hp = 0;
+    if (it.kind === 'barrel') { blast(it.s, it.u, 6, 220); toast('油桶爆炸！'); }
+    else if (it.kind === 'crate') {
+      const c = pickCap(); if (!c) return;
+      const r = Math.random();
+      if (r < 0.4) { c.n = Math.min(CAP_MAX, c.n + 6); toast(`物資箱：${c.name}隊 +6`); }
+      else if (r < 0.7) { c.tier++; toast(`物資箱：${c.name}隊武器升級！`); }
+      else { st.ult = 1; toast('物資箱：大招充滿！'); }
+      st.loot.ammo += 2; st.loot.parts += 2;
+    } else if (it.kind === 'cage') {
+      const c = pickCap(); if (c) c.n = Math.min(CAP_MAX, c.n + 4);
+      st.freed++;
+      const who = st.freed % 3 === 0 && cfg.rescue ? cfg.rescue() : null;
+      if (who) { st.charShards[who.id] = (st.charShards[who.id] || 0) + 1; toast(`籠入面係 ${who.name}（${who.rarity}）！專屬碎片 +1`); }
+      else toast(`救出被困嘅人：${c ? c.name + '隊' : ''} +4`);
+    } else st.loot.parts += 1;
   }
 
   function update(dt, mv) {
     if (st.over) return;
     st.t += dt;
+    for (const f of later.splice(0)) f();
     const alive = caps.filter(c => c.alive);
-    // 前進（屍王未死就停喺街尾）
     const stopAt = L - 55;
     if (!(bossSpawned && boss && boss.hp > 0 && st.s >= stopAt)) st.s = Math.min(L, st.s + SPEED * dt);
     st.x = Math.max(-LANE / 2 + 5, Math.min(LANE / 2 - 5, st.x + mv.x * 12 * dt));
 
-    // 門
-    for (const g of gates) if (!g.used && st.s >= g.s) { g.used = true; applyGate(g, st.x < 0 ? -1 : 1); }
-    // 路口：橫街湧屍；大路口可以放大招
+    // ---- 出屍：前面一排排湧過嚟、騎樓伏擊、大隻佬、路口屍潮 ----
+    if (st.s + 70 > nextRow && nextRow < L - 70) {
+      const n = Math.round(3 + nextRow / 70 + troops() / 18);
+      for (let i = 0; i < n; i++) spawnZ(nextRow + R(0, 6), R(-LANE / 2 + 1, LANE / 2 - 1), Math.random() < 0.2 ? 'runner' : 'walker', zHp(nextRow));
+      nextRow += R(10, 16);
+    }
+    if (st.t > nextAmbush && st.s < L - 90) {
+      nextAmbush = st.t + R(6, 10);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      for (let i = 0; i < 5; i++) spawnZ(st.s + R(18, 30), side * (LANE / 2 + R(3, 8)), 'runner', zHp(st.s) * 0.8, side);
+      toast(side < 0 ? '左邊騎樓有屍衝出嚟！' : '右邊騎樓有屍衝出嚟！');
+    }
+    if (st.s + 60 > nextBrute && nextBrute < L - 120) { spawnZ(nextBrute, R(-4, 4), 'brute', 500 + nextBrute * 1.5); toast('前面有大隻佬！'); nextBrute += 160; }
     for (const j of juncs) {
       if (!jDone.has(j) && st.s > j.s - 70) {
         jDone.add(j);
-        const n = 8 + Math.floor(st.s / 40) + (j.w >= 10 ? 8 : 0), hp = 30 + st.s / 10;
-        for (let i = 0; i < n; i++) { const side = i % 2 ? 1 : -1; spawnZ(j.s + (Math.random() - 0.5) * j.w, side * (LANE / 2 + 2 + Math.random() * 10), Math.random() < 0.25 ? 'runner' : 'walker', hp); zombies[zombies.length - 1].side = side; }
+        const n = 8 + Math.floor(st.s / 40) + (j.w >= 10 ? 8 : 0);
+        for (let i = 0; i < n; i++) { const side = i % 2 ? 1 : -1; spawnZ(j.s + R(-j.w / 2, j.w / 2), side * (LANE / 2 + 2 + R(0, 10)), Math.random() < 0.25 ? 'runner' : 'walker', zHp(j.s), side); }
+        if (j.name) toast(`${j.name}路口屍潮！`);
       }
-      if (j.w >= 10 && Math.abs(st.s - j.s) < 25) { if (!st.ultReady && !j.ultUsed) { st.ultReady = true; st.ultJ = j; toast(`大路口：${j.name || '十字路口'}！撳「大招」`); } }
-      else if (st.ultJ === j) st.ultReady = false;
+      if (j.w >= 10 && Math.abs(st.s - j.s) < 25 && !j.ultUsed && st.ult < 1) { st.ult = 1; st.ultJ = j; toast(`大路口：${j.name || '十字路口'}！大招充滿`); }
       if (Math.abs(st.s - j.s) < 20) st.cross = j.name;
     }
     if (!bossSpawned && st.s > L - 110) { bossSpawned = true; spawnZ(L - 20, 0, 'boss', 2400 + st.s * 2); boss = zombies[zombies.length - 1]; toast('街尾有屍王！'); }
 
-    // 小兵開火
+    // ---- 小兵開火：前面嘅屍優先，冇就射門、射路上嘢 ----
     for (const c of alive) {
       const T = c.troop, dmgMul = (1 + 0.5 * (c.tier - 1)) * levelMul(c.lvl);
       c.fireT -= dt;
       if (T.regen && (c.regenT += dt) > T.regen) { c.regenT = 0; if (c.n < c.start * 3) c.n++; }
-      if (c.fireT > 0 || c.n <= 0 && c.hp <= 0) continue;
-      const p = groupPos(c), shooters = Math.max(1, c.n);
+      if (c.fireT > 0) continue;
+      const p = groupPos(c), shooters = Math.max(1, c.n), dmg = T.dmg * shooters * dmgMul;
       let tgt = null, best = Infinity;
       for (const z of zombies) {
         const ds = z.s - p.s, du = Math.abs(z.u - p.u);
@@ -192,20 +241,37 @@ export function createStreetScene(map, cfg = {}) {
         const v = T.sniper ? -z.hp : ds + du;
         if (v < best) { best = v; tgt = z; }
       }
-      if (!tgt) { // 冇屍就打障礙
-        for (const o of obstacles) if (o.hp > 0 && o.s - p.s > 0 && o.s - p.s < T.range && Math.abs(o.u - p.u) < 4) { o.hp -= T.dmg * shooters * dmgMul * 0.5; c.fireT = T.cd; effects.push({ kind: 'tracer', s0: p.s, u0: p.u, s1: o.s, u1: o.u, t: 0.08, life: 0.08 }); if (o.hp <= 0) { st.loot.parts += 1; } break; }
+      if (tgt) {
+        c.fireT = T.cd;
+        if (T.aoe) {
+          for (const z of zombies) if (z.s - p.s > -1 && z.s - p.s < T.range && Math.abs(z.u - p.u) < 5) { z.hp -= dmg; z.flash = 0.08; }
+          effects.push({ kind: 'flame', s: p.s, u: p.u, r: T.range, t: 0.3, life: 0.3 });
+        } else {
+          tgt.hp -= dmg; tgt.flash = 0.08;
+          for (let k = 0; k < Math.min(4, shooters); k++) effects.push({ kind: 'tracer', s0: p.s + 0.5, u0: p.u + (k - 1.5) * 0.6, s1: tgt.s, u1: tgt.u, t: 0.07, life: 0.07, heavy: T.sniper });
+        }
         continue;
       }
-      c.fireT = T.cd;
-      if (T.aoe) {
-        for (const z of zombies) if (z.s - p.s > -1 && z.s - p.s < T.range && Math.abs(z.u - p.u) < 5) { z.hp -= T.dmg * shooters * dmgMul; z.flash = 0.08; }
-        effects.push({ kind: 'flame', s: p.s, u: p.u, r: T.range, t: 0.3, life: 0.3 });
-      } else {
-        tgt.hp -= T.dmg * shooters * dmgMul; tgt.flash = 0.08;
-        for (let k = 0; k < Math.min(4, shooters); k++) effects.push({ kind: 'tracer', s0: p.s + 0.5, u0: p.u + (k - 1.5) * 0.6, s1: tgt.s, u1: tgt.u, t: 0.07, life: 0.07, heavy: T.sniper });
+      let thing = null, tb = Infinity; // 同一條直線上最近嘅嘢或者門
+      for (const it of items) if (it.hp > 0 && it.s - p.s > 0 && it.s - p.s < T.range && Math.abs(it.u - p.u) < it.w / 2 + 2 && it.s - p.s < tb) { tb = it.s - p.s; thing = it; }
+      for (const g of gates) {
+        if (g.used || g.s - p.s <= 2 || g.s - p.s > T.range || g.s - p.s > tb) continue;
+        const k = p.u < 0 ? g.left : g.right;
+        if (k.op === '+' || k.op === '−') { tb = g.s - p.s; thing = { gate: g, k }; }
       }
+      if (!thing) continue;
+      c.fireT = T.cd;
+      const ts = thing.gate ? thing.gate.s : thing.s, tu = thing.gate ? (p.u < 0 ? -LANE / 4 : LANE / 4) : thing.u;
+      effects.push({ kind: 'tracer', s0: p.s + 0.5, u0: p.u, s1: ts, u1: tu, t: 0.07, life: 0.07 });
+      if (thing.gate) { // 射門：每 25 點傷害 +1（−門會慢慢變 +）
+        const k = thing.k;
+        k.dmg += dmg;
+        const need = () => 25 * (1 + (k.op === '+' ? k.v : 0) / 4); // 越高越難射
+        while (k.dmg >= need() && !(k.op === '+' && k.v >= 15)) { k.dmg -= need(); if (k.op === '−') { k.v--; if (k.v <= 0) { k.op = '+'; k.v = 1; } } else k.v++; }
+      } else { thing.hp -= dmg; if (thing.hp <= 0) breakItem(thing); }
     }
-    // 喪屍行埋嚟；撞到小隊就食咗小兵
+
+    // ---- 喪屍行埋嚟；撞到小隊就食咗小兵 ----
     for (const z of zombies) {
       z.flash -= dt;
       if (z.hp <= 0) continue;
@@ -219,25 +285,32 @@ export function createStreetScene(map, cfg = {}) {
         if (Math.abs(z.u) < LANE / 2) z.side = 0;
       }
       if (bd < groupR(tgt) + z.r) {
-        if (z.type === 'boss') { // 屍王：每秒食幾個
+        if (z.type === 'boss' || z.type === 'brute') { // 大隻：慢慢食
           z.biteT = (z.biteT || 0) - dt;
-          if (z.biteT <= 0) { z.biteT = 0.7; if (tgt.n > 0) tgt.n = Math.max(0, tgt.n - 2); else tgt.hp -= 30; }
+          if (z.biteT <= 0) { z.biteT = 0.7; const k = z.type === 'boss' ? 2 : 1; if (tgt.n > 0) tgt.n = Math.max(0, tgt.n - k); else tgt.hp -= 30; }
           continue;
         }
-        z.hp = 0;
+        z.hp = 0; z.bit = true;
         if (tgt.n > 0) tgt.n -= tgt.troop.shield ? (Math.random() < 0.5 ? 1 : 0) : 1;
         else tgt.hp -= 25;
       }
     }
-    // 撞障礙
-    for (const o of obstacles) {
-      if (o.hp <= 0 || Math.abs(o.s - st.s) > o.h / 2 + 1) continue;
-      for (const c of alive) if (Math.abs(groupPos(c).u - o.u) < o.w / 2 + groupR(c) * 0.6) { o.hp = 0; c.n = Math.max(0, c.n - 3); toast(`${c.name}隊撞到${o.kind === 'car' ? '廢車' : '路障'}！−3`); break; }
+    for (const g of gates) if (!g.used && st.s >= g.s) { g.used = true; applyGate(g, st.x < 0 ? -1 : 1); }
+    for (const it of items) { // 撞路上嘢
+      if (it.hp <= 0 || Math.abs(it.s - st.s) > it.h / 2 + 1) continue;
+      for (const c of alive) if (Math.abs(groupPos(c).u - it.u) < it.w / 2 + groupR(c) * 0.6) {
+        if (it.kind === 'barrel' || it.kind === 'crate' || it.kind === 'cage') breakItem(it);
+        else { it.hp = 0; c.n = Math.max(0, c.n - 3); toast(`${c.name}隊撞到${it.kind === 'car' ? '廢車' : '路障'}！−3`); }
+        break;
+      }
     }
     for (const c of caps) if (c.alive && c.hp <= 0) { c.alive = false; toast(`${c.name}倒下！`); }
-    let j = 0;
-    for (const z of zombies) { if (z.hp > 0 && z.s > st.s - 20) zombies[j++] = z; else if (z.hp <= 0 && z.s > st.s - 20) { st.kills++; st.loot.food += 0.06; st.loot.ammo += 0.05; } }
+    let j = 0, kills = 0;
+    for (const z of zombies) { if (z.hp > 0 && z.s > st.s - 20) zombies[j++] = z; else if (z.hp <= 0 && !z.bit) kills++; }
     zombies.length = j;
+    st.kills += kills; st.loot.food += kills * 0.05; st.loot.ammo += kills * 0.04;
+    st.ult = Math.min(1, st.ult + kills / 160);
+    st.ultReady = st.ult >= 1;
     for (const e of effects) e.t -= dt;
     j = 0;
     for (const e of effects) if (e.t > 0) effects[j++] = e;
@@ -246,19 +319,19 @@ export function createStreetScene(map, cfg = {}) {
     if (!caps.some(c => c.alive)) { st.over = 'lose'; return; }
     if (st.s >= L && (!boss || boss.hp <= 0) && !finished) {
       finished = true;
-      const allAlive = caps.every(c => c.alive);
-      st.shards = allAlive ? 2 : 1;
+      st.shards += caps.every(c => c.alive) ? 2 : 1;
+      const who = cfg.rescue ? cfg.rescue() : null;
+      if (who) { st.charShards[who.id] = (st.charShards[who.id] || 0) + 1; toast(`街尾救到 ${who.name}（${who.rarity}）！`); }
       st.loot.food += 15; st.loot.meds += 5; st.loot.ammo += 10; st.loot.parts += 5;
-      toast(`救到街尾嘅倖存者！招募碎片 +${st.shards}`);
       st.over = 'win';
     }
   }
 
-  // 大路口大招：三個隊長一齊放，清走前面一大片
+  // 大招：三隊一齊放，清走前面一大片（殺屍充電，大路口即刻充滿）
   function ult() {
-    if (!st.ultReady) return false;
-    st.ultReady = false; st.ultJ.ultUsed = true;
-    for (const z of zombies) if (z.s - st.s > -5 && z.s - st.s < 30) { z.hp -= z.type === 'boss' ? 600 : 999; z.flash = 0.2; }
+    if (st.ult < 1) return false;
+    st.ult = 0; st.ultReady = false; if (st.ultJ) st.ultJ.ultUsed = true;
+    for (const z of zombies) if (z.s - st.s > -5 && z.s - st.s < 32) { z.hp -= z.type === 'boss' ? 600 : z.type === 'brute' ? 400 : 999; z.flash = 0.2; }
     effects.push({ kind: 'blast', s: st.s + 14, u: 0, r: 16, t: 0.6, life: 0.6 });
     toast('三隊一齊放大招！');
     return true;
@@ -271,82 +344,84 @@ export function createStreetScene(map, cfg = {}) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#23271f'; ctx.fillRect(0, 0, W, H);
     const s0 = st.s - H * 0.3 / z, s1 = st.s + H * 0.8 / z;
-    // 騎樓街屋：兩邊每 4 米一間
-    for (let s = Math.floor(s0 / 4) * 4; s < s1; s += 4) {
+    for (let s = Math.floor(s0 / 4) * 4; s < s1; s += 4) { // 騎樓街屋
       for (const side of [-1, 1]) {
         const k = Math.abs(Math.sin(s * 12.9898 + side * 78.233)) * 1000 % 1;
         ctx.fillStyle = k < 0.3 ? '#2b2f28' : k < 0.6 ? '#272b24' : '#2f332b';
         const x0 = side < 0 ? 0 : ux(LANE / 2 + 1.5), x1 = side < 0 ? ux(-LANE / 2 - 1.5) : W;
         ctx.fillRect(x0, sy(s + 4), x1 - x0, 4 * z - 1);
-        ctx.fillStyle = '#1b1e18'; // 騎樓柱
+        ctx.fillStyle = '#1b1e18';
         ctx.fillRect(side < 0 ? ux(-LANE / 2 - 1.5) - 0.5 * z : ux(LANE / 2 + 1.5), sy(s + 4), 0.5 * z, 0.6 * z);
+        if (k > 0.85) { ctx.fillStyle = '#4d3b2c'; ctx.fillRect(side < 0 ? ux(-LANE / 2 - 1.2) : ux(LANE / 2 + 0.3), sy(s + 2), 0.9 * z, 0.35 * z); } // 倒地機車
       }
     }
-    ctx.fillStyle = '#33352f'; // 騎樓下行人路
+    ctx.fillStyle = '#33352f';
     ctx.fillRect(ux(-LANE / 2 - 1.5), 0, 1.5 * z, H); ctx.fillRect(ux(LANE / 2), 0, 1.5 * z, H);
     ctx.fillStyle = '#3c3e3a'; ctx.fillRect(ux(-LANE / 2), 0, LANE * z, H);
-    // 橫街
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (const j of juncs) {
+    for (const j of juncs) { // 橫街（真實街名）
       if (j.s < s0 - 20 || j.s > s1 + 20) continue;
       const w = Math.max(6, j.w);
       ctx.fillStyle = '#3c3e3a'; ctx.fillRect(0, sy(j.s + w / 2), W, w * z);
-      ctx.font = `900 ${Math.max(11, z * 1.4)}px "Noto Sans TC", sans-serif`;
+      ctx.font = `900 ${Math.max(11, z * 1.2)}px "Noto Sans TC", sans-serif`;
       ctx.fillStyle = '#a9a796';
-      if (j.name) { ctx.fillText(j.name, ux(-LANE / 2 - 6), sy(j.s)); ctx.fillText(j.name, ux(LANE / 2 + 6), sy(j.s)); }
+      if (j.name) { ctx.fillText(j.name, ux(-LANE / 2 - 5), sy(j.s)); ctx.fillText(j.name, ux(LANE / 2 + 5), sy(j.s)); }
     }
     ctx.setLineDash([3 * z, 4 * z]); ctx.strokeStyle = '#5f5b45'; ctx.lineWidth = 0.22 * z;
     ctx.beginPath(); ctx.moveTo(ux(0), 0); ctx.lineTo(ux(0), H); ctx.stroke(); ctx.setLineDash([]);
-    // 店舖招牌（真實 OSM 店名）
-    ctx.font = `700 ${Math.max(10, z * 1.1)}px "Noto Sans TC", sans-serif`;
-    for (const g of signs) {
+    ctx.font = `700 ${Math.max(10, z * 1)}px "Noto Sans TC", sans-serif`;
+    for (const g of signs) { // 真實店名招牌
       if (g.s < s0 || g.s > s1) continue;
-      const x = ux(g.side * (LANE / 2 + 5));
+      const x = ux(g.side * (LANE / 2 + 4.5));
       ctx.fillStyle = g.type === 'pharmacy' ? '#4d774a' : g.type === 'police' ? '#45607a' : '#9c5228';
       const tw = ctx.measureText(g.name).width + 8;
       ctx.fillRect(x - tw / 2, sy(g.s) - 9, tw, 18);
       ctx.fillStyle = '#d9d6cc'; ctx.fillText(g.name, x, sy(g.s));
     }
-    // 門
-    for (const g of gates) {
+    for (const g of gates) { // 門
       if (g.used || g.s < s0 || g.s > s1) continue;
       for (const [side, k] of [[-1, g.left], [1, g.right]]) {
-        const good = k[0] !== '−';
-        ctx.fillStyle = good ? 'rgba(93,107,79,.85)' : 'rgba(179,48,42,.75)';
+        ctx.fillStyle = k.op === '−' ? 'rgba(179,48,42,.75)' : 'rgba(93,107,79,.85)';
         const x0 = side < 0 ? ux(-LANE / 2) : ux(0), w = LANE / 2 * z;
         ctx.fillRect(x0 + 2, sy(g.s) - 1.2 * z, w - 4, 2.4 * z);
-        ctx.fillStyle = '#f1e9dc'; ctx.font = `900 ${Math.max(16, z * 2)}px "IBM Plex Mono", monospace`;
-        ctx.fillText(k[0] === '槍' ? '武器↑' : k[0] + k[1], x0 + w / 2, sy(g.s));
+        if (k.dmg > 0) { ctx.fillStyle = 'rgba(241,233,220,.4)'; ctx.fillRect(x0 + 2, sy(g.s) + 0.9 * z, (w - 4) * Math.min(1, k.dmg / (25 * (1 + (k.op === '+' ? k.v : 0) / 4))), 0.3 * z); }
+        ctx.fillStyle = '#f1e9dc'; ctx.font = `900 ${Math.max(16, z * 1.8)}px "IBM Plex Mono", monospace`;
+        ctx.fillText(k.op === '槍' ? '武器↑' : k.op + k.v, x0 + w / 2, sy(g.s));
       }
     }
-    // 障礙
-    for (const o of obstacles) {
-      if (o.hp <= 0 || o.s < s0 || o.s > s1) continue;
-      ctx.fillStyle = o.kind === 'car' ? '#5b3a2a' : '#6b6a5e';
-      ctx.fillRect(ux(o.u - o.w / 2), sy(o.s + o.h / 2), o.w * z, o.h * z);
-      if (o.kind === 'car') { ctx.fillStyle = '#1a1c1b'; ctx.fillRect(ux(o.u - o.w / 2 + 0.3), sy(o.s + 1), (o.w - 0.6) * z, 2 * z); }
+    for (const it of items) { // 路上嘢
+      if (it.hp <= 0 || it.s < s0 || it.s > s1) continue;
+      const x = ux(it.u - it.w / 2), y = sy(it.s + it.h / 2), w = it.w * z, h = it.h * z;
+      if (it.kind === 'car') { ctx.fillStyle = '#5b3a2a'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#1a1c1b'; ctx.fillRect(x + 0.3 * z, sy(it.s + 1), w - 0.6 * z, 2 * z); }
+      else if (it.kind === 'block') { ctx.fillStyle = '#6b6a5e'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#b5592a'; for (let k = 0; k < 3; k++) ctx.fillRect(x + k * w / 3, y, w / 6, h); }
+      else if (it.kind === 'barrel') { ctx.fillStyle = '#8a3a24'; ctx.beginPath(); ctx.arc(ux(it.u), sy(it.s), 0.6 * z, 0, TAU); ctx.fill(); ctx.fillStyle = '#d9a060'; ctx.font = `900 ${Math.max(9, z * 0.7)}px "Noto Sans TC", sans-serif`; ctx.fillText('油', ux(it.u), sy(it.s)); }
+      else if (it.kind === 'crate') { ctx.fillStyle = '#8a6a3a'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#4a3a20'; ctx.lineWidth = 0.15 * z; ctx.strokeRect(x, y, w, h); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y + h); ctx.stroke(); }
+      else if (it.kind === 'cage') {
+        ctx.fillStyle = '#d9d6cc'; ctx.beginPath(); ctx.arc(ux(it.u), sy(it.s), 0.45 * z, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#6b6a5e'; ctx.lineWidth = 0.15 * z; ctx.strokeRect(x, y, w, h);
+        for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x + k * w / 4, y); ctx.lineTo(x + k * w / 4, y + h); ctx.stroke(); }
+      }
+      if ((it.kind === 'crate' || it.kind === 'cage' || it.kind === 'barrel') && it.hp < it.max) { ctx.fillStyle = '#111'; ctx.fillRect(x, y - 0.5 * z, w, 0.25 * z); ctx.fillStyle = '#cfc8b4'; ctx.fillRect(x, y - 0.5 * z, w * it.hp / it.max, 0.25 * z); }
     }
-    // 喪屍
-    for (const zz of zombies) {
+    for (const zz of zombies) { // 喪屍
       const x = ux(zz.u), y = sy(zz.s), r = zz.r * z;
-      ctx.fillStyle = zz.flash > 0 ? '#d9c9b0' : zz.type === 'boss' ? '#521c19' : zz.type === 'runner' ? '#94402f' : '#7a3a30';
+      ctx.fillStyle = zz.flash > 0 ? '#d9c9b0' : zz.type === 'boss' ? '#521c19' : zz.type === 'brute' ? '#6a5236' : zz.type === 'runner' ? '#94402f' : '#7a3a30';
       ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#4a2420'; ctx.lineWidth = 0.2 * z;
       ctx.beginPath(); ctx.moveTo(x - r * 0.7, y); ctx.lineTo(x - r * 0.8, y + r * 1.3 + Math.sin(st.t * 6 + zz.wob) * 2); ctx.moveTo(x + r * 0.7, y); ctx.lineTo(x + r * 0.8, y + r * 1.2); ctx.stroke();
-      if (zz.type === 'boss') { ctx.fillStyle = '#111'; ctx.fillRect(x - 3 * z, y - r - z, 6 * z, 0.5 * z); ctx.fillStyle = '#b3302a'; ctx.fillRect(x - 3 * z, y - r - z, 6 * z * Math.max(0, zz.hp / zz.maxHp), 0.5 * z); }
+      if (zz.type === 'boss' || zz.type === 'brute') { const bw = zz.r * 3.3 * z; ctx.fillStyle = '#111'; ctx.fillRect(x - bw / 2, y - r - z, bw, 0.5 * z); ctx.fillStyle = '#b3302a'; ctx.fillRect(x - bw / 2, y - r - z, bw * Math.max(0, zz.hp / zz.maxHp), 0.5 * z); }
     }
-    // 小隊
-    ctx.font = `900 ${Math.max(10, z * 0.9)}px "Noto Sans TC", sans-serif`;
-    caps.forEach((c, i) => {
+    caps.forEach((c, i) => { // 小隊
       if (!c.alive) return;
       const p = groupPos(c), cx = ux(p.u), cy = sy(p.s);
       ctx.fillStyle = '#b8652a';
-      for (let k = 0; k < Math.min(c.n, 60); k++) { const a = k * 2.4, rr = 0.9 + Math.sqrt(k) * 0.42; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rr * z, cy + Math.abs(Math.sin(a)) * rr * z, 0.38 * z, 0, TAU); ctx.fill(); }
+      for (let k = 0; k < Math.min(c.n, 80); k++) { const a = k * 2.4, rr = 0.9 + Math.sqrt(k) * 0.42; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rr * z, cy + Math.abs(Math.sin(a)) * rr * z, 0.38 * z, 0, TAU); ctx.fill(); }
       ctx.fillStyle = st.target === i ? '#f2c27a' : '#e8842c';
       ctx.beginPath(); ctx.arc(cx, cy, 0.8 * z, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#1c1410'; ctx.lineWidth = 0.15 * z; ctx.stroke();
-      ctx.fillStyle = '#1c1410'; ctx.fillText(c.name[0] === '阿' || c.name[0] === '小' ? c.name[1] : c.name[0], cx, cy);
-      ctx.fillStyle = '#d9d6cc'; ctx.fillText(String(c.n), cx, cy - 1.6 * z);
+      ctx.font = `900 ${Math.max(10, z * 0.9)}px "Noto Sans TC", sans-serif`;
+      ctx.fillStyle = '#1c1410'; ctx.fillText([...c.name].find(ch => ch !== '阿' && ch !== '小' && ch !== ' ') || c.name[0], cx, cy);
+      ctx.fillStyle = '#f1e9dc'; ctx.font = `900 ${Math.max(13, z * 1.2)}px "IBM Plex Mono", monospace`; ctx.fillText(String(c.n), cx, cy - 1.8 * z);
     });
     for (const e of effects) {
       const a = e.t / e.life;
@@ -354,6 +429,7 @@ export function createStreetScene(map, cfg = {}) {
       if (e.kind === 'tracer') { ctx.strokeStyle = e.heavy ? '#e8e0c8' : '#f2c27a'; ctx.lineWidth = (e.heavy ? 0.22 : 0.12) * z; ctx.beginPath(); ctx.moveTo(ux(e.u0), sy(e.s0)); ctx.lineTo(ux(e.u1), sy(e.s1)); ctx.stroke(); }
       else if (e.kind === 'flame') { ctx.fillStyle = 'rgba(217,138,58,.5)'; ctx.beginPath(); ctx.moveTo(ux(e.u), sy(e.s)); ctx.lineTo(ux(e.u - 4), sy(e.s + e.r)); ctx.lineTo(ux(e.u + 4), sy(e.s + e.r)); ctx.closePath(); ctx.fill(); }
       else if (e.kind === 'blast') { ctx.fillStyle = '#c4612a'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.arc(ux(e.u), sy(e.s), e.r * z * (1.2 - a * 0.4), 0, TAU); ctx.fill(); }
+      else if (e.kind === 'pop') { ctx.strokeStyle = e.good ? '#8fbf7a' : '#d94a3a'; ctx.lineWidth = 0.3 * z; ctx.beginPath(); ctx.arc(ux(e.u), sy(e.s), (1 - a) * 6 * z, 0, TAU); ctx.stroke(); }
     }
     ctx.globalAlpha = 1;
   }

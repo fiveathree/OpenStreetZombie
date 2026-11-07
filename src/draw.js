@@ -74,7 +74,7 @@ export function drawSquad(ctx, squad, player, vis) {
     ctx.lineWidth = 0.13; ctx.strokeStyle = '#1c1410'; ctx.stroke();
     if (m.role === 'medic') { ctx.fillStyle = '#d9d6cc'; ctx.fillRect(m.x - 0.55, m.y - 0.12, 0.25, 0.24); } // 手臂十字
     ctx.fillStyle = '#1c1410';
-    ctx.fillText(ROLE_MARK[m.role], m.x, m.y + 0.05);
+    ctx.fillText(m.glyph || ROLE_MARK[m.role], m.x, m.y + 0.05);
     const ratio = m.hp / m.maxHp; // 血條
     ctx.fillStyle = '#111'; ctx.fillRect(m.x - 0.9, m.y - 1.45, 1.8, 0.28);
     ctx.fillStyle = ratio < 0.3 ? '#b3302a' : '#cfc8b4'; ctx.fillRect(m.x - 0.9, m.y - 1.45, 1.8 * ratio, 0.28);

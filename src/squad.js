@@ -1,12 +1,16 @@
 // 共用隊伍：成員（連等級、傷勢、羈絆）、狀態加成、受傷、倒地互救、自動攻擊。三個地圖都用。
 import { ROLES, BLEED_TIME, REVIVE_TIME, REVIVE_RANGE, levelMul, INJURY_HP, ULT_BOOST_LEVEL, activeBonds } from './stats.js';
+import { hero, factionBonds } from './heroes.js';
 
-// opts：{ lvl, injured, bonds:[名] }
+// opts：{ heroId, lvl, injured, bonds:[名], factions:[{name}] }。heroId 決定名、倍數（屍城日誌角色有自己數值）
 export function createMember(role, x, y, opts = {}) {
   const R = ROLES[role], lv = levelMul(opts.lvl || 1), bonds = opts.bonds || [];
+  const H = opts.heroId ? hero(opts.heroId) : null, mul = H?.mul || { hp: 1, dmg: 1, speed: 1 };
+  const fmul = 1 + 0.08 * (opts.factions?.length || 0); // 陣營加成
   const m = {
-    ...R, role, x, y, r: 0.7, lvl: opts.lvl || 1,
-    dmg: R.dmg * lv, hp: R.hp * lv, maxHp: R.hp * lv,
+    ...R, role, x, y, r: 0.7, lvl: opts.lvl || 1, heroId: opts.heroId || role, guest: !!opts.guest,
+    name: H?.name || R.name, job: H?.job || R.job, rarity: H?.rarity, fa: H?.fa || [], glyph: H?.glyph,
+    dmg: R.dmg * lv * mul.dmg * fmul, hp: R.hp * lv * mul.hp * fmul, maxHp: R.hp * lv * mul.hp * fmul, speed: R.speed * mul.speed,
     reviveMul: R.reviveMul || 1, pierce: R.pierce || 0, injured: !!opts.injured,
     ultInfo: R.ult, ult: 0, ultRate: 1, ultBoost: (opts.lvl || 1) >= ULT_BOOST_LEVEL ? 1.5 : 1,
     state: 'ok', bleed: 0, revive: 0, fireT: Math.random() * R.cd, healT: 0, aim: 0, face: 0, dir: 0, flash: 0, shotT: 0,
@@ -14,15 +18,19 @@ export function createMember(role, x, y, opts = {}) {
   };
   if (bonds.includes('戰地醫護')) { if (role === 'medic') m.heal *= 1.25; if (role === 'dps') { m.maxHp *= 1.25; m.hp = m.maxHp; } }
   if (bonds.includes('救援隊')) m.speed *= 1.08;
+  if (H?.pet) { m.attack = 'shove'; m.range = 2; m.knock = 1; m.dmg = 14 * lv * mul.dmg * fmul; m.cd = 0.5; } // 貓狗：咬
   if (m.injured) { m.maxHp *= INJURY_HP; m.hp = m.maxHp; }
   return m;
 }
 
-// team：[{ role, lvl, injured }]，第一個一定係你
+// team：[{ role, heroId, lvl, injured }]，第一個一定係你
 export function createSquad(x, y, team = [{ role: 'player' }, { role: 'tank' }, { role: 'medic' }, { role: 'dps' }]) {
-  const bonds = activeBonds(team.map(t => t.role)).map(b => b.name);
-  const squad = team.map(t => createMember(t.role, x, y, { ...t, bonds }));
-  squad.bonds = bonds;
+  const ids = team.filter(t => t.role !== 'player').map(t => t.heroId || t.role);
+  const bonds = activeBonds(ids).map(b => b.name);
+  const factions = factionBonds(ids);
+  const squad = team.map(t => createMember(t.role, x, y, { ...t, bonds, factions }));
+  squad.bonds = [...bonds, ...factions.map(f => f.name)];
+  squad.factions = factions;
   return squad;
 }
 
