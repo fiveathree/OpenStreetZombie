@@ -41,25 +41,42 @@ export function buildMap(data) {
     cars.push({ x: x - uy * off * side, y: y + ux * off * side, a: Math.atan2(uy, ux) + (rand() - 0.5) * 0.6, c: rand() });
   });
 
-  // 用瀏覽器 canvas 光柵化：白色 = 行得
+  // 店舖：由招牌開一條 3 米行人路去最近嘅街，等人入得去
+  const nearestRoadPoint = (x, y) => {
+    let bx = x, by = y, bd = Infinity;
+    for (const r of roads) for (let i = 1; i < r.pts.length; i++) {
+      const [ax, ay] = r.pts[i - 1], [cx, cy] = r.pts[i], vx = cx - ax, vy = cy - ay, l2 = vx * vx + vy * vy || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2)), px = ax + vx * t, py = ay + vy * t, d = (px - x) ** 2 + (py - y) ** 2;
+      if (d < bd) { bd = d; bx = px; by = py; }
+    }
+    return { x: bx, y: by };
+  };
+  const doors = data.pois.map(p => ({ x: p.x, y: p.y, ...(({ x, y }) => ({ dx: x, dy: y }))(nearestRoadPoint(p.x, p.y)) }));
+
+  // 用瀏覽器 canvas 光柵化：白色 = 行得。
+  // 次序要緊：OSM 有啲建築輪廓蓋過路面（騎樓、天幕），所以先畫建築、後畫路，路一定行得；最後先擺廢車。
   const cv = document.createElement('canvas');
   cv.width = cv.height = n;
   const g = cv.getContext('2d', { willReadFrequently: true });
   g.fillStyle = '#000';
   g.fillRect(0, 0, n, n);
   g.scale(1 / CELL, 1 / CELL);
-  g.strokeStyle = g.fillStyle = '#fff';
   g.lineCap = g.lineJoin = 'round';
-  for (const r of roads) { g.lineWidth = r.w; g.beginPath(); trace(g, r.pts); g.stroke(); }
+  g.fillStyle = '#fff';
   for (const p of data.open) { g.beginPath(); trace(g, p, true); g.fill(); }
   g.fillStyle = '#000';
   for (const b of data.buildings) { g.beginPath(); trace(g, b, true); g.fill(); }
+  g.strokeStyle = g.fillStyle = '#fff';
+  for (const r of roads) { g.lineWidth = r.w + 0.5; g.beginPath(); trace(g, r.pts); g.stroke(); }
+  g.lineWidth = 3.5;
+  for (const d of doors) { g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(d.dx, d.dy); g.stroke(); g.beginPath(); g.arc(d.x, d.y, 2.5, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#000';
   for (const c of cars) { g.save(); g.translate(c.x, c.y); g.rotate(c.a); g.fillRect(-2.2, -1, 4.4, 2); g.restore(); }
   const px = g.getImageData(0, 0, n, n).data;
   const walk = new Uint8Array(n * n);
   for (let i = 0; i < n * n; i++) {
     const x = i % n, y = (i - x) / n;
-    walk[i] = px[i * 4] > 127 && x > 0 && y > 0 && x < n - 1 && y < n - 1 ? 1 : 0; // 最外一圈當牆
+    walk[i] = px[i * 4] >= 100 && x > 0 && y > 0 && x < n - 1 && y < n - 1 ? 1 : 0; // 最外一圈當牆
   }
 
   const idx = (x, y) => {
@@ -113,7 +130,7 @@ export function buildMap(data) {
   };
 
   const start = nearestFree(size / 2, size / 2);
-  // 地點（藥房等）嘅招牌留喺原位，生效位置移去最近嘅街上
+  // 地點（藥房等）：招牌喺店原位，店前已經開咗路，生效位置就喺店度
   const pois = data.pois.map(p => ({ ...p, ...nearestFree(p.x, p.y), sx: p.x, sy: p.y }));
 
   // ---- 畫圖用嘅 Path2D（一次過整好，每格重用）----
@@ -149,6 +166,7 @@ export function buildMap(data) {
   }
   for (const p of data.open) trace(open, p, true);
   for (const b of data.buildings) trace(bld, b, true);
+  for (const d of doors) { foot.moveTo(d.x, d.y); foot.lineTo(d.dx, d.dy); } // 入店嘅路
   for (const r of roads) {
     const thin = r.k === 'footway' || r.k === 'path' || r.k === 'steps' || r.k === 'pedestrian';
     if (thin) { trace(foot, r.pts); continue; }
