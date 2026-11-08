@@ -109,7 +109,7 @@ export function createStreetScene(map, cfg = {}) {
   const signs = signsAlong(map, street).filter(s => s.s < L);
   const effects = [];
   const st = {
-    t: 0, s: 0, x: 0, kills: 0, over: null, toasts: [], loot: { food: 0, meds: 0, parts: 0, ammo: 0 }, shards: 0, charShards: {},
+    t: 0, s: 0, x: -LANE / 4, side: -1, kills: 0, over: null, toasts: [], loot: { food: 0, meds: 0, parts: 0, ammo: 0 }, shards: 0, charShards: {},
     target: -1, ult: 0, ultReady: false, street: street.name, len: L, cross: '', freed: 0,
   };
   const toast = m => st.toasts.push(m);
@@ -118,7 +118,7 @@ export function createStreetScene(map, cfg = {}) {
   const capList = (cfg.captains || [{ role: 'tank' }, { role: 'dps' }, { role: 'medic' }]).slice(0, 3);
   const caps = capList.map((c, i) => ({
     role: c.role, heroId: c.heroId, name: c.name || ROLES[c.role].name, troop: TROOPS[c.role], lvl: c.lvl || 1,
-    off: (i - (capList.length - 1) / 2) * 5, n: 8, tier: 1, hp: 100 * levelMul(c.lvl || 1), maxHp: 100 * levelMul(c.lvl || 1), alive: true, fireT: 0, regenT: 0, start: 8,
+    off: (i - (capList.length - 1) / 2) * 2, n: 8, tier: 1, hp: 100 * levelMul(c.lvl || 1), maxHp: 100 * levelMul(c.lvl || 1), alive: true, fireT: 0, regenT: 0, start: 8,
   }));
   st.caps = caps;
 
@@ -127,15 +127,18 @@ export function createStreetScene(map, cfg = {}) {
   const pickKind = () => { const k = KINDS[(Math.random() * KINDS.length) | 0]; return { op: k[0], v: k[1], dmg: 0 }; };
   const gates = [];
   const addGate = s => { const a = pickKind(); let b = pickKind(); if (a.op === '−' && b.op === '−') b = { op: '+', v: 2, dmg: 0 }; gates.push({ s, left: a, right: b, used: false }); };
-  for (const j of juncs) addGate(j.s - 14);
-  for (let s = 55; s < L - 90; s += 55) if (!gates.some(g => Math.abs(g.s - s) < 25)) addGate(s);
+  for (const j of juncs) if (!gates.some(g => Math.abs(g.s - (j.s - 14)) < 35)) addGate(j.s - 14);
+  for (let s = 60; s < L - 90; s += 75) if (!gates.some(g => Math.abs(g.s - s) < 35)) addGate(s);
+
+  // 門前 24 米淨係得門：冇屍、冇路上嘢，全隊火力射門
+  const gateZone = s => gates.some(g => s > g.s - 24 && s < g.s + 4);
 
   // ---- 路上嘢：廢車、路障、油桶、物資箱、被困倖存者（全部可以射）----
   const items = [];
-  const clear = s => !gates.some(g => Math.abs(g.s - s) < 10) && !juncs.some(j => Math.abs(j.s - s) < 8);
+  const clear = s => !gateZone(s) && !juncs.some(j => Math.abs(j.s - s) < 8);
   for (let s = 45; s < L - 80; s += R(9, 16)) {
     if (!clear(s)) continue;
-    const k = Math.random(), u = R(-LANE / 2 + 2, LANE / 2 - 2);
+    const k = Math.random(), u = (Math.random() < 0.5 ? -1 : 1) * R(1.5, LANE / 2 - 1.5); // 一係左一係右，唔擋正中
     if (k < 0.25) items.push({ kind: 'car', s, u, w: R(2, 3), h: 4.2, hp: 90 });
     else if (k < 0.35) items.push({ kind: 'block', s, u, w: 3, h: 1.2, hp: 60 });
     else if (k < 0.6) items.push({ kind: 'barrel', s, u, w: 1.2, h: 1.2, hp: 30 });
@@ -200,23 +203,28 @@ export function createStreetScene(map, cfg = {}) {
     const alive = caps.filter(c => c.alive);
     const stopAt = L - 55;
     if (!(bossSpawned && boss && boss.hp > 0 && st.s >= stopAt)) st.s = Math.min(L, st.s + SPEED * dt);
-    st.x = Math.max(-LANE / 2 + 5, Math.min(LANE / 2 - 5, st.x + mv.x * 12 * dt));
+    // 全隊一係左、一係右：推左就成隊去左邊，推右就去右邊
+    if (mv.x > 0.35) st.side = 1; else if (mv.x < -0.35) st.side = -1;
+    const gx = st.side * LANE / 4;
+    st.x += Math.sign(gx - st.x) * Math.min(Math.abs(gx - st.x), 20 * dt);
 
     // ---- 出屍：前面一排排湧過嚟、騎樓伏擊、大隻佬、路口屍潮 ----
+    while (gateZone(nextRow)) nextRow += 4;
     if (st.s + 70 > nextRow && nextRow < L - 70) {
       const n = Math.round(3 + nextRow / 70 + troops() / 18);
       for (let i = 0; i < n; i++) spawnZ(nextRow + R(0, 6), R(-LANE / 2 + 1, LANE / 2 - 1), Math.random() < 0.2 ? 'runner' : 'walker', zHp(nextRow));
       nextRow += R(10, 16);
     }
-    if (st.t > nextAmbush && st.s < L - 90) {
+    if (st.t > nextAmbush && st.s < L - 90 && !gates.some(g => !g.used && g.s - st.s > -4 && g.s - st.s < 58)) {
       nextAmbush = st.t + R(6, 10);
       const side = Math.random() < 0.5 ? -1 : 1;
       for (let i = 0; i < 5; i++) spawnZ(st.s + R(18, 30), side * (LANE / 2 + R(3, 8)), 'runner', zHp(st.s) * 0.8, side);
       toast(side < 0 ? '左邊騎樓有屍衝出嚟！' : '右邊騎樓有屍衝出嚟！');
     }
+    while (gateZone(nextBrute)) nextBrute += 10;
     if (st.s + 60 > nextBrute && nextBrute < L - 120) { spawnZ(nextBrute, R(-4, 4), 'brute', 500 + nextBrute * 1.5); toast('前面有大隻佬！'); nextBrute += 160; }
     for (const j of juncs) {
-      if (!jDone.has(j) && st.s > j.s - 70) {
+      if (!jDone.has(j) && st.s > j.s - 12 && !gates.some(g => !g.used && g.s > st.s && g.s - st.s < 30)) { // 過咗門先湧出嚟
         jDone.add(j);
         const n = 8 + Math.floor(st.s / 40) + (j.w >= 10 ? 8 : 0);
         for (let i = 0; i < n; i++) { const side = i % 2 ? 1 : -1; spawnZ(j.s + R(-j.w / 2, j.w / 2), side * (LANE / 2 + 2 + R(0, 10)), Math.random() < 0.25 ? 'runner' : 'walker', zHp(j.s), side); }
@@ -235,9 +243,10 @@ export function createStreetScene(map, cfg = {}) {
       if (c.fireT > 0) continue;
       const p = groupPos(c), shooters = Math.max(1, c.n), dmg = T.dmg * shooters * dmgMul;
       let tgt = null, best = Infinity;
+      const atGate = gates.some(g => !g.used && g.s - p.s > 2 && g.s - p.s < 24); // 門前：除非屍貼身，否則專心射門
       for (const z of zombies) {
         const ds = z.s - p.s, du = Math.abs(z.u - p.u);
-        if (ds < -2 || ds > T.range || du > (T.aoe ? 5 : 9)) continue;
+        if (ds < -2 || ds > (atGate ? Math.min(6, T.range) : T.range) || du > (T.aoe ? 5 : 9)) continue;
         const v = T.sniper ? -z.hp : ds + du;
         if (v < best) { best = v; tgt = z; }
       }
@@ -272,6 +281,8 @@ export function createStreetScene(map, cfg = {}) {
     }
 
     // ---- 喪屍行埋嚟；撞到小隊就食咗小兵 ----
+    // 前面未過嘅門好似一道牆：門後嘅屍要等你過咗門先衝過嚟，揀門時唔會分散火力
+    const wall = gates.reduce((w, g) => (!g.used && g.s > st.s && (!w || g.s < w.s) ? g : w), null);
     for (const z of zombies) {
       z.flash -= dt;
       if (z.hp <= 0) continue;
@@ -281,7 +292,9 @@ export function createStreetScene(map, cfg = {}) {
       const p = groupPos(tgt);
       if (bd < 40 || z.side) {
         const ds = p.s - z.s, du = p.u - z.u, d = Math.hypot(ds, du) || 1;
+        const behind = wall && z.s > wall.s;
         z.s += ds / d * z.speed * dt; z.u += du / d * z.speed * dt;
+        if (behind) z.s = Math.max(z.s, wall.s + 3);
         if (Math.abs(z.u) < LANE / 2) z.side = 0;
       }
       if (bd < groupR(tgt) + z.r) {
@@ -295,7 +308,7 @@ export function createStreetScene(map, cfg = {}) {
         else tgt.hp -= 25;
       }
     }
-    for (const g of gates) if (!g.used && st.s >= g.s) { g.used = true; applyGate(g, st.x < 0 ? -1 : 1); }
+    for (const g of gates) if (!g.used && st.s >= g.s) { g.used = true; applyGate(g, st.side); }
     for (const it of items) { // 撞路上嘢
       if (it.hp <= 0 || Math.abs(it.s - st.s) > it.h / 2 + 1) continue;
       for (const c of alive) if (Math.abs(groupPos(c).u - it.u) < it.w / 2 + groupR(c) * 0.6) {
@@ -369,6 +382,7 @@ export function createStreetScene(map, cfg = {}) {
     }
     ctx.setLineDash([3 * z, 4 * z]); ctx.strokeStyle = '#5f5b45'; ctx.lineWidth = 0.22 * z;
     ctx.beginPath(); ctx.moveTo(ux(0), 0); ctx.lineTo(ux(0), H); ctx.stroke(); ctx.setLineDash([]);
+    for (const g of gates) if (!g.used && g.s > st.s - 2 && g.s - st.s < 30) { ctx.fillStyle = '#c9a25a'; ctx.fillRect(ux(0) - 0.15 * z, sy(g.s), 0.3 * z, (g.s - Math.max(st.s - 2, g.s - 24)) * z); }
     ctx.font = `700 ${Math.max(10, z * 1)}px "Noto Sans TC", sans-serif`;
     for (const g of signs) { // 真實店名招牌
       if (g.s < s0 || g.s > s1) continue;

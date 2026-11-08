@@ -406,7 +406,7 @@ let mmDrag = null;
 const mmPos = e => { const r = mm.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
 mm.addEventListener('pointerdown', e => {
   e.preventDefault();
-  if (scene?.kind !== 'big') return;
+  if (!scene?.lookAt) return;
   mm.setPointerCapture(e.pointerId);
   mmDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
   if (sel < 0) scene.lookAt(...mmPos(e)); // 揀咗人時，撳一下係派人，唔係移鏡頭
@@ -418,7 +418,7 @@ mm.addEventListener('pointermove', e => {
 });
 const mmEnd = e => {
   if (!mmDrag || e.pointerId !== mmDrag.id) return;
-  if (!mmDrag.moved && e.type === 'pointerup') {
+  if (!mmDrag.moved && e.type === 'pointerup' && scene.kind === 'big') {
     const [fx, fy] = mmPos(e), id = scene.tapMinimap(fx, fy);
     if (sel > 0) { if (id) scene.assign(id, sel); else scene.sendTo(sel, fx * scene.size, fy * scene.size); }
     else if (id) openDispatch(id);
@@ -491,7 +491,7 @@ function frame(now) {
     else if (scene.state.over) showEnd();
   } else if (scene === backdrop) backdrop?.idle(clock);
   scene?.render(ctx, W, H, dpr, dt);
-  if (mode === 'play' || mode === 'cards') { hud(dt); if (scene.kind === 'big') scene.renderMinimap(mmCtx, mm.width); }
+  if (mode === 'play' || mode === 'cards') { hud(dt); scene.renderMinimap?.(mmCtx, mm.width); if (scene.isLooking) $('#lookBack').hidden = !scene.isLooking(); }
   requestAnimationFrame(frame);
 }
 

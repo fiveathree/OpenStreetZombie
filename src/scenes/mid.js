@@ -1,7 +1,8 @@
 // 中地圖場景：一個真實街區，你＋3 個隊友，撐夠 5 分鐘喪屍潮；中途救倖存者、用地點、放大招。
 import { createFlowField } from '../flowfield.js';
 import { createHorde } from '../horde.js';
-import { ZOMBIES, MATCH_TIME, SURGES, waveAt, xpNeed, applyUpgrade } from '../stats.js';
+import { ZOMBIES, MATCH_TIME, SURGES, POIS, waveAt, xpNeed, applyUpgrade } from '../stats.js';
+const TAU = Math.PI * 2;
 import { createSquad, hurt, updateDowned, autoAttack, chargeUlt, tickBuffs, bmul } from '../squad.js';
 import { updateAlly } from '../ally-ai.js';
 import { castUlt, updateZones, drawZones } from '../skills.js';
@@ -24,6 +25,7 @@ export function createMidScene(map, cfg = {}) {
   const night = cfg.night ? createNight() : null;
   const st = { t: 0, kills: 0, level: 1, xp: 0, pendingLevels: 0, over: null, command: 'follow', focus: null, toasts: [], squad, loot, shards: 0, rescued: 0, charShards: {} };
   let flowT = 0, flowTurn = false, spawnAcc = 0, surgeIdx = 0, follow = player, killsThisFrame = 0;
+  let look = null, mmBase = null; // 撳小地圖睇第度；你一郁就返嚟
   const survivors = []; // 待救嘅倖存者
   const toast = m => st.toasts.push(m);
   const effect = e => effects.push(e);
@@ -60,6 +62,7 @@ export function createMidScene(map, cfg = {}) {
   function update(dt, mv) {
     if (st.over) return;
     st.t += dt;
+    if (mv && (mv.x || mv.y)) look = null;
     if (st.t >= MATCH_TIME) { st.t = MATCH_TIME; st.over = 'win'; return; }
     killsThisFrame = 0;
 
@@ -153,7 +156,7 @@ export function createMidScene(map, cfg = {}) {
   function render(ctx, W, H, dpr, dt = 0) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#121518'; ctx.fillRect(0, 0, W, H);
-    const vis = applyCamera(ctx, cam, follow, W, H, dpr, dt);
+    const vis = applyCamera(ctx, cam, look || follow, W, H, dpr, dt);
     map.draw(ctx, cam.view);
     drawLabels(ctx, map.labels, cam, W, H, dpr, vis);
     worldTransform(ctx, cam, W, H, dpr);
@@ -201,7 +204,38 @@ export function createMidScene(map, cfg = {}) {
     follow = { x: map.start.x + Math.sin(t * 0.05) * 30, y: map.start.y + Math.cos(t * 0.037) * 30 };
   }
 
+  // ---- 小地圖：街道、地點、倖存者、屍、隊員（名牌）----
+  function renderMinimap(ctx, S) {
+    const k = S / map.size, f = S / 150;
+    if (!mmBase || mmBase.width !== S) {
+      mmBase = document.createElement('canvas'); mmBase.width = mmBase.height = S;
+      const g = mmBase.getContext('2d');
+      g.fillStyle = '#1a1d19'; g.fillRect(0, 0, S, S);
+      g.strokeStyle = '#3e403a'; g.lineCap = 'round';
+      for (const r of map.roads) { g.lineWidth = Math.max(f, (r.w || 6) * k); g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(p[0] * k, p[1] * k) : g.moveTo(p[0] * k, p[1] * k))); g.stroke(); }
+    }
+    ctx.drawImage(mmBase, 0, 0);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const p of pois) { const x = (p.sx ?? p.x) * k, y = (p.sy ?? p.y) * k, s = 5 * f; ctx.fillStyle = POIS[p.type].color; ctx.fillRect(x - s / 2, y - s / 2, s, s); }
+    ctx.fillStyle = '#d94a3a';
+    for (const z of horde.zombies) { const s = (z.type === 'boss' || z.type === 'king' ? 5 : 2) * f; ctx.fillRect(z.x * k - s / 2, z.y * k - s / 2, s, s); }
+    for (const v of survivors) { ctx.fillStyle = Math.sin(st.t * 8) > 0 ? '#ffffff' : '#9a978c'; ctx.beginPath(); ctx.arc(v.x * k, v.y * k, 3 * f, 0, TAU); ctx.fill(); }
+    for (const m of [...squad.filter(m => m !== player), player]) {
+      if (m.state === 'dead') continue;
+      const x = m.x * k, y = m.y * k, r = (m === player ? 6 : 5) * f;
+      ctx.fillStyle = m.state === 'down' ? '#6b6560' : m === player ? '#f2c27a' : m.guest ? '#d9a060' : '#e8842c';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.lineWidth = f; ctx.strokeStyle = '#1c1410'; ctx.stroke();
+      ctx.fillStyle = '#1c1410'; ctx.font = `900 ${7 * f}px "Noto Sans TC", sans-serif`;
+      ctx.fillText(m === player ? '你' : m.glyph || [...m.name].find(c => c !== '阿' && c !== '小' && c !== ' ') || m.name[0], x, y + 0.5 * f);
+    }
+    ctx.strokeStyle = '#d9d6cc'; ctx.lineWidth = f;
+    ctx.strokeRect((cam.x - cam.hw) * k, (cam.y - cam.hh) * k, cam.hw * 2 * k, cam.hh * 2 * k);
+  }
+  const lookAt = (fx, fy) => { const c = v => Math.max(0, Math.min(1, v)) * map.size; look = { x: c(fx), y: c(fy) }; cam.x = look.x; cam.y = look.y; };
+  const lookBack = () => { look = null; cam.x = follow.x; cam.y = follow.y; };
+
   return {
+    renderMinimap, lookAt, lookBack, isLooking: () => !!look, size: map.size,
     kind: 'mid', state: st, update, render, command, pickUpgrade, idle, squad,
     ult: () => castUlt(player, world),
     zoomBy: f => zoomCam(cam, f), setZoom: v => { cam.zoom = cam.zoomTarget = Math.max(0.45, Math.min(2, v || 1)); },
