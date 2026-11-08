@@ -177,13 +177,20 @@ export function buildMap(data, opts = {}) {
   const pt = (x, y, pad) => [x - pad, y - pad, x + pad, y + pad];
 
   // 騎樓街屋：沿路邊每 4 米一條分隔線，令街區睇落似一排排透天厝
-  alongRoads(roads.filter(r => r.w >= 4 && !r.bridge), detail ? 4 : 7, (r, x, y, ux, uy) => {
+  const lotStep = detail ? 4 : 7;
+  alongRoads(roads.filter(r => r.w >= 4 && !r.bridge), lotStep, (r, x, y, ux, uy) => {
     for (const s of [-1, 1]) {
-      const e = r.w / 2 + 0.3, depth = 9 + rand() * 6;
-      add('shop', pt(x, y, e + depth), p => { p.moveTo(x - uy * e * s, y + ux * e * s); p.lineTo(x - uy * (e + depth) * s, y + ux * (e + depth) * s); });
+      const e = r.w / 2 + (r.w >= 7 ? 1.9 : 0.3), depth = 9 + rand() * 6, h = lotStep / 2;
+      // 屋頂：一格一色（混凝土、鐵皮、鏽、帆布），前面有一條深色簷篷影
+      const fx = x - uy * e * s, fy = y + ux * e * s, bx = x - uy * (e + depth) * s, by = y + ux * (e + depth) * s;
+      add('roof' + ((rand() * 6) | 0), pt(x, y, e + depth + h), p => { p.moveTo(fx - ux * h, fy - uy * h); p.lineTo(fx + ux * h, fy + uy * h); p.lineTo(bx + ux * h, by + uy * h); p.lineTo(bx - ux * h, by - uy * h); p.closePath(); });
+      add('eave', pt(x, y, e + 2), p => { p.moveTo(fx - ux * h, fy - uy * h); p.lineTo(fx + ux * h, fy + uy * h); });
+      add('shop', pt(x, y, e + depth), p => { p.moveTo(fx - ux * h, fy - uy * h); p.lineTo(bx - ux * h, by - uy * h); });
+      if (detail && rand() < 0.4) { const d = e + 1.5 + rand() * (depth - 3), cx = x - uy * d * s + ux * (rand() - 0.5) * 2, cy = y + ux * d * s + uy * (rand() - 0.5) * 2; add('ac', pt(cx, cy, 1), p => p.rect(cx - 0.45, cy - 0.35, 0.9, 0.7)); }
+      if (rand() < 0.2) { const d = e + 2 + rand() * (depth - 4), cx = x - uy * d * s, cy = y + ux * d * s, rr = 0.8 + rand() * 1.5; add('rust', pt(cx, cy, rr), p => { p.moveTo(cx + rr, cy); p.ellipse(cx, cy, rr, rr * 0.6, rand() * 3, 0, Math.PI * 2); }); }
       if (rand() < 0.35) { // 天台水塔／鐵皮
         const d = e + 2 + rand() * (depth - 4), cx = x - uy * d * s, cy = y + ux * d * s;
-        if (rand() < 0.5) add('roofLight', pt(cx, cy, 1), p => p.rect(cx - 0.7, cy - 0.7, 1.4, 1.4));
+        if (rand() < 0.5) add('roofLight', pt(cx, cy, 1), p => { p.moveTo(cx + 0.75, cy); p.arc(cx, cy, 0.75, 0, Math.PI * 2); }); // 水塔
         else add('roofDark', pt(cx, cy, 1.5), p => p.rect(cx - 1.2, cy - 0.8, 2.4, 1.6));
       }
     }
@@ -197,6 +204,72 @@ export function buildMap(data, opts = {}) {
     else add('trash', pt(cx, cy, 1), p => p.rect(cx - 0.4, cy - 0.3, 0.8, 0.6));
     if (rand() < 0.15) { const bx = x + (rand() - 0.5) * r.w * 0.6, by = y + (rand() - 0.5) * r.w * 0.6; add('stain', pt(bx, by, 1.5), p => { p.moveTo(bx + 1, by); p.ellipse(bx, by, 1, 0.6, a, 0, Math.PI * 2); }); }
   });
+  // 街區入面（離街遠過街屋嗰排）：一格格屋頂，方向跟最近條街
+  {
+    const B = 40, bucket = new Map(), bk = (i, j) => i * 10000 + j;
+    for (const r of roads) if (r.w >= 4 && !r.bridge) for (let i = 1; i < r.pts.length; i++) {
+      const [x0, y0] = r.pts[i - 1], [x1, y1] = r.pts[i];
+      for (let bi = Math.floor(Math.min(x0, x1) / B); bi <= Math.floor(Math.max(x0, x1) / B); bi++)
+        for (let bj = Math.floor(Math.min(y0, y1) / B); bj <= Math.floor(Math.max(y0, y1) / B); bj++) {
+          const k = bk(bi, bj); if (!bucket.has(k)) bucket.set(k, []); bucket.get(k).push([x0, y0, x1, y1, r.w]);
+        }
+    }
+    const step = detail ? 7 : 12;
+    for (let y = step / 2; y < size; y += step) for (let x = step / 2; x < size; x += step) {
+      const jx = x + (rand() - 0.5) * 2, jy = y + (rand() - 0.5) * 2;
+      if (free(jx, jy)) continue;
+      let bd = Infinity, ang = 0, bw = 0;
+      const bi = Math.floor(jx / B), bj = Math.floor(jy / B);
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (const [x0, y0, x1, y1, w] of bucket.get(bk(bi + di, bj + dj)) || []) {
+        const vx = x1 - x0, vy = y1 - y0, l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((jx - x0) * vx + (jy - y0) * vy) / l2));
+        const d = Math.hypot(x0 + vx * t - jx, y0 + vy * t - jy);
+        if (d < bd) { bd = d; ang = Math.atan2(vy, vx); bw = w; }
+      }
+      if (bd < bw / 2 + 15) continue; // 街屋嗰排已經有屋頂
+      const c = Math.cos(ang), sn = Math.sin(ang), hw = step * 0.5 + rand() * 1.2, hh = step * 0.38 + rand() * 1.5;
+      add('roof' + ((rand() * 6) | 0), pt(jx, jy, step), q => { q.moveTo(jx + c * hw - sn * hh, jy + sn * hw + c * hh); q.lineTo(jx - c * hw - sn * hh, jy - sn * hw + c * hh); q.lineTo(jx - c * hw + sn * hh, jy - sn * hw - c * hh); q.lineTo(jx + c * hw + sn * hh, jy + sn * hw - c * hh); q.closePath(); });
+      add('shop', pt(jx, jy, step), q => { q.moveTo(jx + c * hw - sn * hh, jy + sn * hw + c * hh); q.lineTo(jx - c * hw - sn * hh, jy - sn * hw + c * hh); });
+      if (detail && rand() < 0.3) { const ox = jx + (rand() - 0.5) * hw, oy = jy + (rand() - 0.5) * hh; if (rand() < 0.5) add('roofLight', pt(ox, oy, 1), q => { q.moveTo(ox + 0.75, oy); q.arc(ox, oy, 0.75, 0, Math.PI * 2); }); else add('ac', pt(ox, oy, 1), q => q.rect(ox - 0.45, oy - 0.35, 0.9, 0.7)); }
+    }
+  }
+  // 行道樹：闊路兩邊行人路，每 12 米左右一棵（淨係畫，唔擋路）
+  const tree = (cx, cy, r) => {
+    add('treeShadow', pt(cx + 0.6, cy + 0.6, r + 1), p => { p.moveTo(cx + 0.6 + r, cy + 0.6); p.arc(cx + 0.6, cy + 0.6, r, 0, Math.PI * 2); });
+    add('tree', pt(cx, cy, r), p => { p.moveTo(cx + r, cy); p.arc(cx, cy, r, 0, Math.PI * 2); });
+    add('treeHi', pt(cx, cy, r), p => { const hr = r * 0.45, hx = cx - r * 0.3, hy = cy - r * 0.3; p.moveTo(hx + hr, hy); p.arc(hx, hy, hr, 0, Math.PI * 2); });
+  };
+  alongRoads(roads.filter(r => r.w >= 10 && !r.bridge), 6, (r, x, y, ux, uy) => {
+    if (rand() > 0.45) return;
+    const s = rand() < 0.5 ? -1 : 1, o = r.w / 2 + 1;
+    tree(x - uy * o * s, y + ux * o * s, 1.4 + rand() * 0.9);
+  });
+  const inPoly = (poly, x, y) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  for (const poly of data.open) { // 公園、空地：散落幾棵樹
+    const [x0, y0, x1, y1] = bboxOf(poly), area = (x1 - x0) * (y1 - y0);
+    for (let k = 0, n = Math.min(40, area / (detail ? 90 : 300)); k < n; k++) { const x = x0 + rand() * (x1 - x0), y = y0 + rand() * (y1 - y0); if (inPoly(poly, x, y)) tree(x, y, 1.6 + rand() * 1.4); }
+  }
+  // 斑馬線：路口（兩條路相交）前面
+  const ends = new Map();
+  const keyOf = (x, y) => Math.round(x / 3) + ',' + Math.round(y / 3);
+  for (const r of roads) for (const q of r.pts) { const k = keyOf(q[0], q[1]); ends.set(k, (ends.get(k) || 0) + 1); }
+  if (detail) for (const r of roads) {
+    if (r.w < 7 || r.bridge || r.pts.length < 2) continue;
+    for (const [a, b] of [[r.pts[0], r.pts[1]], [r.pts[r.pts.length - 1], r.pts[r.pts.length - 2]]]) {
+      if ((ends.get(keyOf(a[0], a[1])) || 0) < 2) continue;
+      const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); if (l < 12) continue;
+      const ux = dx / l, uy = dy / l, d = 7, cx = a[0] + ux * d, cy = a[1] + uy * d;
+      add('zebra', pt(cx, cy, r.w), p => { for (let o = -r.w / 2 + 0.6; o < r.w / 2 - 0.4; o += 1.1) { const sx = cx - uy * o, sy = cy + ux * o; p.moveTo(sx - ux * 1.3 - uy * 0.25, sy - uy * 1.3 + ux * 0.25); p.lineTo(sx + ux * 1.3 - uy * 0.25, sy + uy * 1.3 + ux * 0.25); p.lineTo(sx + ux * 1.3 + uy * 0.25, sy + uy * 1.3 - ux * 0.25); p.lineTo(sx - ux * 1.3 + uy * 0.25, sy - uy * 1.3 - ux * 0.25); p.closePath(); } });
+    }
+  }
+  alongRoads(roads.filter(r => r.w >= 6 && !r.bridge), detail ? 9 : 18, (r, x, y, ux, uy) => { // 路面補丁
+    if (rand() > 0.35) return;
+    const o = (rand() - 0.5) * (r.w - 3), cx = x - uy * o, cy = y + ux * o, w = 1.5 + rand() * 3, hgt = 1 + rand() * 1.5, a = Math.atan2(uy, ux);
+    add(rand() < 0.6 ? 'patchDark' : 'patchLight', pt(cx, cy, w), p => { p.moveTo(cx + Math.cos(a) * w, cy + Math.sin(a) * w); p.ellipse(cx, cy, w, hgt, a, 0, Math.PI * 2); });
+  });
+  for (const r of rivers) alongRoads([{ ...r, w: RIVER_W }], 14, (_, x, y, ux, uy) => { // 河面水紋
+    for (let k = 0; k < 2; k++) { const o = (rand() - 0.5) * RIVER_W * 0.8, cx = x - uy * o, cy = y + ux * o, l = 2 + rand() * 4; add('ripple', pt(cx, cy, l), p => { p.moveTo(cx - ux * l, cy - uy * l); p.lineTo(cx + ux * l, cy + uy * l); }); }
+  });
+
   // 街道名：沿路每大約 80 米放一個，同名嘅唔好太近（巷 = 細字，拉遠時唔顯示）
   const labels = [];
   for (const r of roads) {
@@ -212,7 +285,7 @@ export function buildMap(data, opts = {}) {
     });
   }
   for (const p of data.open) add('open', bboxOf(p), path => trace(path, p, true));
-  for (const b of data.buildings) add('bld', bboxOf(b), path => trace(path, b, true));
+  for (const b of data.buildings) { const k = 'bld' + ((rand() * 4) | 0); add(k, bboxOf(b), path => trace(path, b, true)); add('bldAll', bboxOf(b), path => trace(path, b, true)); }
   for (const w of water) add('water', bboxOf(w), path => trace(path, w, true));
   for (const r of rivers) add('river', bboxOf(r.pts, RIVER_W), path => trace(path, r.pts));
   for (const d of doors) add('foot', bboxOf([[d.x, d.y], [d.dx, d.dy]], 2), p => { p.moveTo(d.x, d.y); p.lineTo(d.dx, d.dy); }); // 入店嘅路
@@ -233,7 +306,10 @@ export function buildMap(data, opts = {}) {
     add('cracks', pt(cx, cy, 4), p => { p.moveTo(cx, cy); for (let k = 0; k < 3; k++) { cx += (rand() - 0.5) * 2.4; cy += (rand() - 0.5) * 2.4; p.lineTo(cx, cy); } });
   });
   const bridgeW = Math.max(10, ...roads.filter(r => r.bridge).map(r => r.w));
-  const carColors = ['#5b3a2a', '#4a4f4c', '#6b5e45', '#3f4a52'];
+  const carColors = ['#5b3a2a', '#4a4f4c', '#6b5e45', '#3f4a52', '#5a5a52'];
+  // 天台色：混凝土、深灰、鏽鐵皮、舊帆布、淺灰、啡
+  const ROOFS = ['#35372f', '#2e302a', '#43382e', '#2f3a38', '#3d3e38', '#3a332b'];
+  const BLDS = ['#33352f', '#3a3a33', '#2e3130', '#3b352e'];
   const roadWidths = [...widths].sort((a, b) => a - b);
 
   // view：{ x0, y0, x1, y1 }（米）
@@ -242,24 +318,38 @@ export function buildMap(data, opts = {}) {
     const cx0 = Math.max(0, Math.floor(view.x0 / CHUNK)), cy0 = Math.max(0, Math.floor(view.y0 / CHUNK));
     const cx1 = Math.min(cn - 1, Math.floor(view.x1 / CHUNK)), cy1 = Math.min(cn - 1, Math.floor(view.y1 / CHUNK));
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) { const c = chunks.get(cy * cn + cx); if (c) vis.push(c); }
-    const each = (kind, fn) => { for (const c of vis) { const p = c.get(kind); if (p) fn(p); } };
+    const far = view.x1 - view.x0 > 170; // 拉到好遠：細節睇唔到，唔畫（慳手機）
+    const SMALL = new Set(['ac', 'rust', 'patchDark', 'patchLight', 'zebra', 'cracks', 'ripple', 'treeHi', 'stain', 'trash', 'scooter', 'eave']);
+    const each = (kind, fn) => { if (far && SMALL.has(kind)) return; for (const c of vis) { const p = c.get(kind); if (p) fn(p); } };
 
     g.fillStyle = '#121518';
     g.fillRect(view.x0 - 5, view.y0 - 5, view.x1 - view.x0 + 10, view.y1 - view.y0 + 10);
-    g.fillStyle = '#23271f'; // 街屋天台
+    g.fillStyle = '#262923'; // 後巷、天井
     g.fillRect(Math.max(0, view.x0), Math.max(0, view.y0), Math.min(size, view.x1) - Math.max(0, view.x0), Math.min(size, view.y1) - Math.max(0, view.y0));
-    g.lineWidth = 0.25; g.strokeStyle = '#181b16'; each('shop', p => g.stroke(p));
-    g.fillStyle = '#2e3229'; each('roofLight', p => g.fill(p));
-    g.fillStyle = '#1b1e18'; each('roofDark', p => g.fill(p));
-    g.fillStyle = '#30362c'; each('open', p => g.fill(p)); // 公園、停車場
-    g.fillStyle = '#2b2f28'; each('bld', p => g.fill(p));
-    g.lineWidth = 0.4; g.strokeStyle = '#171a15'; each('bld', p => g.stroke(p));
+    ROOFS.forEach((c, i) => { g.fillStyle = c; each('roof' + i, p => g.fill(p)); }); // 街屋天台
+    g.fillStyle = '#5a4030'; each('rust', p => g.fill(p));
+    g.lineWidth = 0.22; g.strokeStyle = '#1a1c17'; each('shop', p => g.stroke(p));
+    g.lineWidth = 1.1; g.strokeStyle = '#1c1e19'; each('eave', p => g.stroke(p));
+    g.fillStyle = '#4a4c46'; each('roofLight', p => g.fill(p)); // 水塔
+    g.fillStyle = '#1f221d'; each('roofDark', p => g.fill(p));
+    g.fillStyle = '#5e605a'; each('ac', p => g.fill(p));
+    g.fillStyle = '#323b2c'; each('open', p => g.fill(p)); // 公園、空地
+    g.save(); g.translate(0.8, 0.8); g.fillStyle = 'rgba(0,0,0,.35)'; each('bldAll', p => g.fill(p)); g.restore(); // 建築影
+    BLDS.forEach((c, i) => { g.fillStyle = c; each('bld' + i, p => g.fill(p)); });
+    g.lineWidth = 0.35; g.strokeStyle = '#4a4a42'; each('bldAll', p => g.stroke(p)); // 天台石壆
     g.lineCap = g.lineJoin = 'round';
-    g.fillStyle = '#16202a'; each('water', p => g.fill(p)); // 河
-    g.lineWidth = RIVER_W; g.strokeStyle = '#16202a'; each('river', p => g.stroke(p));
-    for (const w of roadWidths) { g.lineWidth = w + 1; g.strokeStyle = '#171918'; each('road' + w, p => g.stroke(p)); }
-    g.lineWidth = 3.2; g.strokeStyle = '#33352f'; each('foot', p => g.stroke(p));
-    for (const w of roadWidths) { g.lineWidth = w; g.strokeStyle = '#3c3e3a'; each('road' + w, p => g.stroke(p)); }
+    g.lineWidth = RIVER_W + 3; g.strokeStyle = '#3a3a32'; each('river', p => g.stroke(p)); // 河堤
+    g.fillStyle = '#18232c'; each('water', p => g.fill(p)); // 河
+    g.lineWidth = RIVER_W; g.strokeStyle = '#18232c'; each('river', p => g.stroke(p));
+    g.lineWidth = 0.3; g.strokeStyle = '#2a3a46'; each('ripple', p => g.stroke(p));
+    for (const w of roadWidths) { g.lineWidth = w + (w >= 7 ? 4.4 : 1); g.strokeStyle = '#191b19'; each('road' + w, p => g.stroke(p)); }
+    for (const w of roadWidths) if (w >= 7) { g.lineWidth = w + 3.8; g.strokeStyle = '#4b4b44'; each('road' + w, p => g.stroke(p)); } // 行人路
+    g.lineWidth = 3.2; g.strokeStyle = '#46463f'; each('foot', p => g.stroke(p));
+    for (const w of roadWidths) { g.lineWidth = w + 0.5; g.strokeStyle = '#2a2b28'; each('road' + w, p => g.stroke(p)); } // 石壆
+    for (const w of roadWidths) { g.lineWidth = w; g.strokeStyle = '#3a3c38'; each('road' + w, p => g.stroke(p)); }
+    g.fillStyle = '#333531'; each('patchDark', p => g.fill(p));
+    g.fillStyle = '#42443f'; each('patchLight', p => g.fill(p));
+    g.fillStyle = '#6a6960'; each('zebra', p => g.fill(p));
     g.lineCap = 'butt';
     g.lineWidth = bridgeW + 2.4; g.strokeStyle = '#6b6a5e'; each('bridge', p => g.stroke(p)); // 橋欄
     g.lineWidth = bridgeW; g.strokeStyle = '#41433d'; each('bridge', p => g.stroke(p));
@@ -269,14 +359,23 @@ export function buildMap(data, opts = {}) {
     g.fillStyle = '#3a2422'; each('stain', p => g.fill(p));
     g.fillStyle = '#2a2b27'; each('trash', p => g.fill(p));
     g.lineWidth = 0.6; g.strokeStyle = '#4d3b2c'; each('scooter', p => g.stroke(p));
-    for (const c of cars) {
+    for (const c of cars) { // 廢車：有車頂、擋風玻璃、車燈；有啲燒剩個殼
       if (c.x < view.x0 - 3 || c.x > view.x1 + 3 || c.y < view.y0 - 3 || c.y > view.y1 + 3) continue;
+      const burnt = c.c > 0.82, col = burnt ? '#2a2420' : carColors[(c.c * carColors.length) | 0];
       g.save(); g.translate(c.x, c.y); g.rotate(c.a);
-      g.fillStyle = carColors[(c.c * carColors.length) | 0];
-      g.fillRect(-2.2, -1, 4.4, 2);
-      g.fillStyle = '#1a1c1b'; g.fillRect(-0.9, -0.8, 1.9, 1.6);
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(-2.1, -0.85, 4.6, 2.05);
+      g.fillStyle = col; g.beginPath(); g.roundRect(-2.3, -1.05, 4.6, 2.1, 0.45); g.fill();
+      g.lineWidth = 0.08; g.strokeStyle = '#141412'; g.stroke();
+      g.fillStyle = burnt ? '#1a1614' : '#22272a'; g.fillRect(0.55, -0.8, 0.75, 1.6); g.fillRect(-1.6, -0.75, 0.55, 1.5); // 前後玻璃
+      g.fillStyle = burnt ? '#3a2a22' : col; g.fillRect(-1.05, -0.82, 1.6, 1.64); // 車頂
+      if (burnt) { g.fillStyle = '#5a3a26'; g.fillRect(-0.6, -0.5, 0.8, 0.5); g.fillRect(1.4, 0.2, 0.5, 0.5); }
+      else { g.fillStyle = '#8a8466'; g.fillRect(2.15, -0.85, 0.12, 0.35); g.fillRect(2.15, 0.5, 0.12, 0.35); }
       g.restore();
     }
+    g.fillStyle = 'rgba(0,0,0,.3)'; each('treeShadow', p => g.fill(p)); // 樹
+    g.fillStyle = '#2d3a27'; each('tree', p => g.fill(p));
+    g.lineWidth = 0.15; g.strokeStyle = '#1a2216'; each('tree', p => g.stroke(p));
+    g.fillStyle = '#3a4a31'; each('treeHi', p => g.fill(p));
   }
 
   // 地標（景點、車站、廟、塔）：大字、唔轉角度、拉遠都顯示
