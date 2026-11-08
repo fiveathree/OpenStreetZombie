@@ -35,10 +35,19 @@ const MIDS = {
   'os-dotonbori': { city: 'os', name: '道頓堀', desc: '夜晚・河邊招牌街', hard: 2, night: true },
   'os-shinsekai': { city: 'os', name: '新世界・通天閣', desc: '白天・通天閣', hard: 2.05 },
 };
+// 大地圖：每個城市一張。spots = 主城同巢穴嘅經緯度（三條路自動揀）；hard = 喪屍強度倍數
+const BIGS = {
+  big: { city: 'kh', name: '愛河大戰', desc: '三路經愛河三條橋・打爆東岸巢穴', won: '愛河兩岸安全', need: 'qixian', why: '兩個街區都過咗先開' },
+  'hk-big': { city: 'hk', name: '九龍大戰', desc: '主城喺尖沙咀・三路北上打爆油麻地巢穴', won: '九龍安全', spots: { base: [22.2995, 114.1720], nest: [22.3100, 114.1700] }, hard: 1.3 },
+  'tp-big': { city: 'tp', name: '台北城大戰', desc: '主城喺中正紀念堂・打爆台北車站巢穴', won: '台北城安全', spots: { base: [25.0360, 121.5200], nest: [25.0478, 121.5170] }, hard: 1.2 },
+  'tk-big': { city: 'tk', name: '新宿大戰', desc: '主城喺新宿御苑・打爆歌舞伎町巢穴', won: '新宿安全', spots: { base: [35.6872, 139.7060], nest: [35.6960, 139.7000] }, hard: 1.4 },
+  'os-big': { city: 'os', name: '難波決戰', desc: '主城喺日本橋・打爆道頓堀巢穴', won: '大阪安全', spots: { base: [34.6590, 135.5050], nest: [34.6690, 135.5015] }, hard: 1.6 },
+};
 for (const id in MIDS) MIDS[id].file = `data/${id}.json`;
+for (const id in BIGS) BIGS[id].file = `data/${id}.json`;
 // 開唔開：過咗就開；有 need 就睇 need；主線地圖要之前嘅章節全部做完
 function mapOpen(id) {
-  const M = MIDS[id];
+  const M = MIDS[id] || BIGS[id];
   if (save.cleared[id]) return true;
   if (M.need) return !!save.cleared[M.need];
   const i = CHAPTERS.findIndex(c => c.mission === id);
@@ -66,8 +75,8 @@ resize();
 const maps = {};
 async function getMap(id) {
   if (maps[id]) return maps[id];
-  const big = id === 'big';
-  return (maps[id] = await loadMap(big ? 'data/big.json' : MIDS[id].file, big ? { cell: 4, detail: false } : {}));
+  const B = BIGS[id];
+  return (maps[id] = await loadMap(B ? B.file : MIDS[id].file, B ? { cell: 4, detail: false } : {}));
 }
 
 let scene = null, mode = 'title', backdrop = null, runInfo = null;
@@ -174,7 +183,7 @@ function showSafehouse(msg) {
   if (storyAuto()) return;
   setMode('safe');
   const chap = currentChapter(save);
-  const tab = cityTab || MIDS[chap?.mission]?.city || 'kh';
+  const tab = cityTab || (MIDS[chap?.mission] || BIGS[chap?.mission])?.city || 'kh';
   const team = teamIds();
   const bonds = [...activeBonds(team).map(b => b.name), ...factionBonds(team).map(f => `陣營：${f.name}`)];
   const street = maps.big ? pickStreet(maps.big, day).name : '今日嘅街';
@@ -216,7 +225,7 @@ function showSafehouse(msg) {
     <div class="missions">
       ${mission('street', '小地圖：街道衝鋒', `今日：${esc(street)}・1–2 分鐘・賺資源同碎片`, true)}
       ${Object.entries(MIDS).filter(([, M]) => M.city === tab).map(([id, M]) => mission(id, '中地圖：' + M.name + (save.cleared[id] ? ' ✓' : ''), M.desc + '・撐 5 分鐘', mapOpen(id), M.need ? `過咗${M.need === 'big' ? '愛河大戰' : MIDS[M.need].name}先開` : '跟主線解鎖')).join('')}
-      ${tab === 'kh' ? mission('big', '大地圖：愛河大戰' + (save.cleared.big ? ' ✓' : ''), '三路經愛河三條橋・打爆東岸巢穴', save.cleared.qixian, '兩個街區都過咗先開') : ''}
+      ${Object.entries(BIGS).filter(([, B]) => B.city === tab).map(([id, B]) => mission(id, '大地圖：' + B.name + (save.cleared[id] ? ' ✓' : ''), B.desc, mapOpen(id), B.why || '跟主線解鎖')).join('')}
     </div>
     ${msg ? `<p class="msg">${msg}</p>` : ''}
     <p class="tiny"><button class="link" id="cheat">全部解鎖（試玩用）</button>・<button class="link" id="wipe">重置存檔</button></p>`;
@@ -233,7 +242,7 @@ function showSafehouse(msg) {
   }));
   card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { cityTab = null; startMission(b.dataset.go); });
   card.querySelectorAll('[data-city]').forEach(b => b.onclick = e => { e.stopPropagation(); cityTab = b.dataset.city; showSafehouse(); });
-  $('#cheat').onclick = () => { for (const id in MIDS) save.cleared[id] = true; save.cleared.big = true; unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
+  $('#cheat').onclick = () => { for (const id in { ...MIDS, ...BIGS }) save.cleared[id] = true; unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
   $('#wipe').onclick = () => { if (confirm('重置存檔？所有進度會清走。')) { save = resetSave(); showSafehouse('存檔已重置。'); } };
 }
 
@@ -261,11 +270,11 @@ async function start(id, chapter = null) {
       const map = await getMap('big');
       scene = createStreetScene(map, { day, captains: team.map(spec), rescue: rescueRoll });
       runInfo = { id, kind: 'street', team };
-    } else if (id === 'big') {
-      const map = await getMap('big');
+    } else if (BIGS[id]) {
+      const map = await getMap(id);
       const extra = owned(save).filter(r => !team.includes(r) && !save.heroes[r].injured).slice(0, 1);
       const four = [...team, ...extra];
-      scene = createBigScene(map, { team: [{ role: 'player' }, ...four.map(spec)], maxZombies: mobile ? 200 : 280 });
+      scene = createBigScene(map, { team: [{ role: 'player' }, ...four.map(spec)], maxZombies: mobile ? 200 : 280, spots: BIGS[id].spots, hard: BIGS[id].hard });
       runInfo = { id, kind: 'big', team: four };
     } else {
       const map = await getMap(id), M = MIDS[id];
@@ -313,10 +322,10 @@ function showEnd() {
   if (kind === 'mid' && win) { loot.food += 30; loot.meds += 12; loot.parts += 15; loot.ammo += 15; }
   if (kind === 'big' && win) { loot.food += 80; loot.meds += 40; loot.parts += 50; loot.ammo += 50; }
   const shards = (s.shards || 0) + (kind === 'big' && win ? 3 : 0);
-  const { got, joined } = applyResult(save, { win, loot, shards, charShards: s.charShards, recruits, xp: Math.round(xp), squad: squadOut, mapId: kind === 'mid' ? runInfo.id : kind === 'big' ? 'big' : null, street: kind === 'street' && win ? 1 : 0 });
+  const { got, joined } = applyResult(save, { win, loot, shards, charShards: s.charShards, recruits, xp: Math.round(xp), squad: squadOut, mapId: kind === 'street' ? null : runInfo.id, street: kind === 'street' && win ? 1 : 0 });
   const hurtNow = squadOut.filter(m => m.state === 'dead').map(m => hero(m.heroId)?.name).filter(Boolean);
   const found = Object.entries(s.charShards || {}).map(([id, n]) => `${hero(id)?.name}（${hero(id)?.rarity}）×${n}`);
-  const title = kind === 'street' ? (win ? `衝到 ${esc(s.street)} 街尾！` : '小隊全滅') : kind === 'big' ? (win ? '打爆咗喪屍巢穴！愛河兩岸安全' : '主城失守') : (win ? `過關！${esc(MIDS[runInfo.id].name)}暫時安全` : '全軍覆沒');
+  const title = kind === 'street' ? (win ? `衝到 ${esc(s.street)} 街尾！` : '小隊全滅') : kind === 'big' ? (win ? '打爆咗喪屍巢穴！' + BIGS[runInfo.id].won : '主城失守') : (win ? `過關！${esc(MIDS[runInfo.id].name)}暫時安全` : '全軍覆沒');
   const stat = kind === 'street' ? `<div><span>跑咗</span><b>${Math.round(s.s)} 米</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`
     : `<div><span>${kind === 'big' ? '打咗' : '撐咗'}</span><b>${mmss(s.t)}</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`;
   const ch = runInfo.chapter;

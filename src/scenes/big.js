@@ -1,4 +1,5 @@
-// 大地圖場景（MOBA，PvE）：主城喺鹽埕，喪屍巢穴喺愛河東岸，三條路經愛河上三條真實嘅橋（七賢橋、中正橋、高雄橋）。
+// 大地圖場景（MOBA，PvE）：主城 → 三條路 → 喪屍巢穴。愛河：三條路經愛河上三條真實嘅橋（七賢橋、中正橋、高雄橋）。
+// 其他城市：cfg.spots 俾主城同巢穴嘅經緯度，三條路自動揀（中間一條，兩邊各偏出去一條）。
 // 一邊出去打野，一邊要派隊友或者守備小隊守住主城同箭塔。打爆巢穴就贏，主城失守就輸。
 import { createFlowField } from '../flowfield.js';
 import { createHorde } from '../horde.js';
@@ -12,8 +13,8 @@ import { rescue } from '../rescue.js';
 import { drawZombies, drawSquad, drawEffects, drawLabels, applyCamera, worldTransform, toScreen, makeCam, zoomCam } from '../draw.js';
 
 const TAU = Math.PI * 2;
-// 人手揀嘅位置（米，原點係範圍左上角；範圍中心 22.6262, 120.2858）
-const SPOTS = {
+// 愛河：人手揀嘅位置（米，原點係範圍左上角；範圍中心 22.6262, 120.2858）
+const AIHE = {
   base: { x: 480, y: 1080, name: '主城（鹽埕）' },
   nest: { x: 1250, y: 760, name: '喪屍巢穴（愛河東岸）' },
   lanes: [
@@ -25,8 +26,16 @@ const SPOTS = {
 
 export function createBigScene(map, cfg = {}) {
   const team = cfg.team || [{ role: 'player' }, { role: 'tank' }, { role: 'medic' }, { role: 'dps' }, { role: 'control' }];
-  const base = map.nearestFree(SPOTS.base.x, SPOTS.base.y);
-  const nestP = map.nearestFree(SPOTS.nest.x, SPOTS.nest.y);
+  // cfg.spots：{ base: [lat, lon], nest: [lat, lon] }；冇就用愛河
+  const ll = ([la, lo]) => { const R = 6378137, rad = Math.PI / 180, [cla, clo] = map.center, h = map.size / 2; return { x: (lo - clo) * rad * R * Math.cos(cla * rad) + h, y: h - (la - cla) * rad * R }; };
+  const S = cfg.spots ? { base: ll(cfg.spots.base), nest: ll(cfg.spots.nest) } : AIHE;
+  const base = map.nearestFree(S.base.x, S.base.y);
+  const nestP = map.nearestFree(S.nest.x, S.nest.y);
+  if (!S.lanes) { // 自動三條路：中路經中點；上下路經兩個向兩邊偏出去嘅點（三成同七成位置），唔好同中路重疊
+    const dx = nestP.x - base.x, dy = nestP.y - base.y, len = Math.hypot(dx, dy), px = -dy / len, py = dx / len, off = len * 0.4;
+    const pt = (f, k) => ({ x: Math.max(20, Math.min(map.size - 20, base.x + dx * f + px * off * k)), y: Math.max(20, Math.min(map.size - 20, base.y + dy * f + py * off * k)) });
+    S.lanes = [['top', '上路', -1], ['mid', '中路', 0], ['bot', '下路', 1]].map(([key, name, k]) => ({ key, name, via: k ? [pt(0.3, k), pt(0.7, k)] : [pt(0.5, 0)] }));
+  }
   const squad = createSquad(base.x, base.y, team);
   const player = squad[0];
   const effects = [], zones = [];
@@ -42,10 +51,14 @@ export function createBigScene(map, cfg = {}) {
 
   // ---- 三條路：主城 → 橋 → 巢穴，用流場搵真實道路 ----
   const flow = createFlowField(map);
-  const lanes = SPOTS.lanes.map(l => {
-    const br = map.nearestFree(l.bridge.x, l.bridge.y);
-    flow.update([br]);
-    const a = flow.trace(base, 1);
+  const lanes = S.lanes.map(l => { // 主城 → 經過點（橋）→ 巢穴；split = 我方半場（塔）同屍方半場（屍巢）分界
+    let a = [], prev = base, br = base;
+    for (const v of l.via || [l.bridge]) {
+      br = map.nearestFree(v.x, v.y);
+      flow.update([br]);
+      a = a.concat(flow.trace(prev, 1));
+      prev = br;
+    }
     flow.update([nestP]);
     const b = flow.trace(br, 1);
     return { ...l, br, pts: a.concat(b), split: a.length };
@@ -101,7 +114,7 @@ export function createBigScene(map, cfg = {}) {
     const c = offLane((p.x + q.x) / 2, (p.y + q.y) / 2);
     if (c) camps.push({ x: c.x, y: c.y, kind: ['elite', 'supply', 'survivor'][camps.length % 3], alive: 0, respawn: 5, prog: 0 });
   }
-  const jbP = offLane((lanes[1].br.x + lanes[2].br.x) / 2 - 80, (lanes[1].br.y + lanes[2].br.y) / 2) || map.nearestFree(900, 1000);
+  const jbP = offLane((lanes[1].br.x + lanes[2].br.x) / 2 - 80, (lanes[1].br.y + lanes[2].br.y) / 2) || map.nearestFree((base.x + nestP.x) / 2, (base.y + nestP.y) / 2);
   const jboss = { x: jbP.x, y: jbP.y, respawn: 30, dead: true, z: null };
   const bossFlow = createFlowField(map); bossFlow.update([jboss]);
   function spawnCamp(c) {
@@ -173,7 +186,7 @@ export function createBigScene(map, cfg = {}) {
 
     // ---- 出兵、出屍 ----
     if (Math.floor(st.t / BIG.minionEvery) !== Math.floor((st.t - dt) / BIG.minionEvery)) for (let i = 0; i < 3; i++) for (let k = 0; k < 4; k++) if (minions.filter(u => u.lane === i).length < 16) spawnMinion(i); // 每路最多 16 個兵，手機唔會卡
-    const tier = 1 + st.t / 420;
+    const tier = (1 + st.t / 420) * (cfg.hard || 1);
     if (st.t > 8 && Math.floor(st.t / BIG.waveEvery) !== Math.floor((st.t - dt) / BIG.waveEvery)) {
       lanes.forEach((l, i) => {
         const outpostAlive = horde.zombies.some(z => z.type === 'outpost' && z.lane === i);

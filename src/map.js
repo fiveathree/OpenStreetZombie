@@ -283,5 +283,5 @@ export function buildMap(data, opts = {}) {
   // 太近嘅（同一間廟兩個寫法、車站幾個入口）淨係留第一個
   const landmarks = (data.landmarks || []).filter((l, i, all) => all.findIndex(o => Math.hypot(o.x - l.x, o.y - l.y) < 30) === i);
   for (const l of landmarks) labels.push({ name: l.name, x: l.x, y: l.y, a: 0, landmark: true });
-  return { name: data.name, size, n, cell, walk, cells, start, pois, labels, landmarks, roads, rivers, idx, free, los, move, cellCenter, nearestFree, draw };
+  return { name: data.name, center: data.center, size, n, cell, walk, cells, start, pois, labels, landmarks, roads, rivers, idx, free, los, move, cellCenter, nearestFree, draw };
 }

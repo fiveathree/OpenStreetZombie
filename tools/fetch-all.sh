@@ -16,3 +16,7 @@ f 35.6598 139.7006 200 data/tk-shibuya.json 東京澀谷
 f 35.6945 139.7020 200 data/tk-shinjuku.json 東京新宿歌舞伎町
 f 34.6687 135.5015 200 data/os-dotonbori.json 大阪道頓堀
 f 34.6522 135.5062 200 data/os-shinsekai.json 大阪新世界・通天閣
+f 22.3050 114.1712 760 data/hk-big.json 九龍・尖沙咀至油麻地 --big
+f 25.0420 121.5150 760 data/tp-big.json 台北城中 --big
+f 35.6920 139.7010 760 data/tk-big.json 新宿 --big
+f 34.6640 135.5030 760 data/os-big.json 難波・道頓堀 --big

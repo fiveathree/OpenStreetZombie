@@ -218,17 +218,36 @@ export const CHAPTERS = [
       { t: 240, who: 'zb_u_shen', text: '佢出嚟喇！全部大招！' },
     ],
     win: [
-      { who: 'narr', text: '香港嘅母體倒低。整個港島嘅屍群好似突然失咗魂。' },
-      { who: 'zb_s_ho', text: '艙單上面下一個港係基隆。貨櫃第二日就用貨車運咗入台北。' },
-      { who: 'zb_s_ho', text: '我同你哋去。我欠嘅，我要還。' },
-      { who: 'narr', text: '何定邦加入咗隊伍。第二部完。' },
+      { who: 'narr', text: '中環地庫嘅母體受咗重傷，拖住肉膜鑽入地鐵隧道，向九龍逃。' },
+      { who: 'zb_s_ho', text: '佢會喺油麻地重新築巢。我知道條路——我同你哋去。我欠嘅，我要還。' },
+      { who: 'narr', text: '何定邦加入咗隊伍。大地圖「九龍大戰」準備好。' },
     ],
     lose: '中環守唔住。退返海旁，再嚟。',
     reward: { hero: 'zb_s_ho' },
+  },  {
+    id: 'hk4', title: '第十章　九龍大戰', mission: 'hk-big', goal: '主城設喺尖沙咀，三路北上，拆屍巢，打爆油麻地嘅巢穴',
+    intro: [
+      { who: 'narr', text: '油麻地。廟街嘅檔口全部被肉膜包住，天后廟頂上面有嘢一下下咁跳。' },
+      { who: 'zb_s_fei', text: '尖沙咀可以做主城，九龍公園後面好守。' },
+      { who: 'tank', text: '同愛河一樣：三條路一齊推，起塔，守城。' },
+      { who: 'zb_u_shen', text: '呢次佢傷咗，但係會更加狂。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_s_ho', text: '彌敦道係中路，最直，但係屍最多。' },
+      { t: 180, who: 'zb_s_fei', text: '野區 Boss 喺天台跳落嚟！' },
+      { t: 300, who: 'zb_u_shen', text: '喪屍王嚟喇，睇小地圖邊條路閃紅！' },
+    ],
+    win: [
+      { who: 'narr', text: '香港嘅母體倒低。整個九龍嘅屍群好似突然失咗魂。' },
+      { who: 'zb_s_ho', text: '艙單上面下一個港係基隆。貨櫃第二日就用貨車運咗入台北。' },
+      { who: 'narr', text: '第二部完。' },
+    ],
+    lose: '尖沙咀主城失守。退返海旁，再嚟。',
   },
+
   // ======== 第三部：台北 ========
   {
-    id: 'tp0', title: '第十章　基隆港', mission: null, part: '第三部：台北',
+    id: 'tp0', title: '第十一章　基隆港', mission: null, part: '第三部：台北',
     intro: [
       { who: 'narr', text: '船泊基隆。港口嘅貨櫃門全部向外打開，好似有嘢由入面爬出嚟。' },
       { who: 'support', text: '台北我熟！我阿叔喺西門町開麵線舖。' },
@@ -239,7 +258,7 @@ export const CHAPTERS = [
     win: [],
   },
   {
-    id: 'tp1', title: '第十一章　紅樓', mission: 'tp-ximen', goal: '喺西門町撐 5 分鐘，守住紅樓嘅倖存者',
+    id: 'tp1', title: '第十二章　紅樓', mission: 'tp-ximen', goal: '喺西門町撐 5 分鐘，守住紅樓嘅倖存者',
     intro: [
       { who: 'narr', text: '西門町。行人專用區嘅招牌仲著住，喇叭重複播緊同一首歌。' },
       { who: 'radio', text: '我是林阿明，夜市總舖師！紅樓裡面有一大鍋湯，你們撐住，我請大家吃！' },
@@ -259,7 +278,7 @@ export const CHAPTERS = [
     reward: { hero: 'zb_s_lin' },
   },
   {
-    id: 'tp2', title: '第十二章　一〇一之夜', mission: 'tp-xinyi', goal: '夜晚喺信義區撐 5 分鐘，打爆台北嘅母體',
+    id: 'tp2', title: '第十三章　一〇一之夜', mission: 'tp-xinyi', goal: '夜晚喺信義區撐 5 分鐘，打爆台北嘅母體',
     intro: [
       { who: 'narr', text: '夜晚。101 冇晒燈，但係樓底下有一團暗紅色嘅光，一閃一閃。' },
       { who: 'zb_u_shen', text: '母體揀咗最高嗰座樓。佢想個聲傳得更遠。' },
@@ -271,15 +290,34 @@ export const CHAPTERS = [
       { t: 240, who: 'zb_u_shen', text: '母體出嚟喇！' },
     ],
     win: [
+      { who: 'narr', text: '天光。101 底下嘅母體受咗傷，順住捷運隧道逃去台北車站，喺地底築巢。' },
+      { who: 'zb_s_lin', text: '台北車站？那裡四通八達，牠會越長越大！' },
+      { who: 'narr', text: '大地圖「台北城大戰」準備好。' },
+    ],
+    lose: '信義區太闊，守唔住。再嚟過。',
+  },  {
+    id: 'tp3', title: '第十四章　台北城大戰', mission: 'tp-big', goal: '主城設喺中正紀念堂，三路推上台北車站，打爆巢穴',
+    intro: [
+      { who: 'narr', text: '中正紀念堂廣場。北面嘅台北車站，屋頂已經變成一團會呼吸嘅肉。' },
+      { who: 'support', text: '總統府喺中間，兩邊各一條路。' },
+      { who: 'zb_s_lin', text: '我在廣場煮好飯，大家吃飽才出發。' },
+    ],
+    radio: [
+      { t: 10, who: 'support', text: '北門嗰邊屍好多，上路要小心。' },
+      { t: 200, who: 'zb_s_ho', text: '二二八公園有物資，有空去拎。' },
+      { t: 320, who: 'zb_u_shen', text: '喪屍王由車站出嚟！' },
+    ],
+    win: [
       { who: 'narr', text: '天光。台北嘅心跳聲停咗。' },
       { who: 'zb_s_ho', text: '下一站，橫濱。貨櫃運咗入東京。' },
       { who: 'narr', text: '第三部完。' },
     ],
-    lose: '信義區太闊，守唔住。再嚟過。',
+    lose: '中正紀念堂失守。再嚟過。',
   },
+
   // ======== 第四部：東京 ========
   {
-    id: 'tk0', title: '第十三章　無聲嘅東京', mission: null, part: '第四部：東京',
+    id: 'tk0', title: '第十五章　無聲嘅東京', mission: null, part: '第四部：東京',
     intro: [
       { who: 'narr', text: '東京灣。一千幾萬人嘅城市，靜到聽到烏鴉叫。' },
       { who: 'radio', text: '（日文）……有冇人收到？我係渡邊，秋葉原。我一直聽住軍方頻道……' },
@@ -290,7 +328,7 @@ export const CHAPTERS = [
     win: [],
   },
   {
-    id: 'tk1', title: '第十四章　十字路口', mission: 'tk-shibuya', goal: '喺澀谷撐 5 分鐘，等渡邊趕到',
+    id: 'tk1', title: '第十六章　十字路口', mission: 'tk-shibuya', goal: '喺澀谷撐 5 分鐘，等渡邊趕到',
     intro: [
       { who: 'narr', text: '澀谷。世界最繁忙嘅十字路口，而家四面八方都係屍。' },
       { who: 'tank', text: '路口太闊，四邊都會嚟。守住中間！' },
@@ -307,7 +345,7 @@ export const CHAPTERS = [
     lose: '十字路口四面受敵。再嚟過。',
   },
   {
-    id: 'tk2', title: '第十五章　歌舞伎町', mission: 'tk-shinjuku', goal: '夜晚喺新宿撐 5 分鐘，打爆東京嘅母體',
+    id: 'tk2', title: '第十七章　歌舞伎町', mission: 'tk-shinjuku', goal: '夜晚喺新宿撐 5 分鐘，打爆東京嘅母體',
     intro: [
       { who: 'narr', text: '新宿。夜晚嘅歌舞伎町冇晒燈，只得遠處一下下嘅心跳聲。' },
       { who: 'zb_r_kenji', text: '我可以用收音機干擾佢嘅低頻聲，但係要時間。' },
@@ -319,16 +357,35 @@ export const CHAPTERS = [
       { t: 250, who: 'zb_u_shen', text: '佢出嚟喇——收尾！' },
     ],
     win: [
-      { who: 'narr', text: '東京嘅母體倒低。收音機入面，自衛隊嘅頻道傳嚟一句：「收到。多謝。」' },
-      { who: 'zb_r_kenji', text: '艙單最後一個港：大阪。我同你哋去。' },
-      { who: 'narr', text: '渡邊健司加入咗隊伍。第四部完。' },
+      { who: 'narr', text: '母體受咗傷，退入歌舞伎町深處。成條一番街開始長出肉牆。' },
+      { who: 'zb_r_kenji', text: '我會留低幫你哋干擾佢。用新宿御苑做主城，三路攻入去。' },
+      { who: 'narr', text: '渡邊健司加入咗隊伍。大地圖「新宿大戰」準備好。' },
     ],
     lose: '歌舞伎町嘅夜太黑。再嚟過。',
     reward: { hero: 'zb_r_kenji' },
+  },  {
+    id: 'tk3', title: '第十八章　新宿大戰', mission: 'tk-big', goal: '主城設喺新宿御苑，三路攻入歌舞伎町，打爆巢穴',
+    intro: [
+      { who: 'narr', text: '新宿御苑。草地上搭咗臨時營地，北面歌舞伎町嘅招牌一個個熄晒。' },
+      { who: 'zb_r_kenji', text: '新宿站好大，佢哋會由月台湧出嚟。' },
+      { who: 'tank', text: '守住御苑，三路推上去。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_r_kenji', text: '干擾開咗，佢哋會慢少少。' },
+      { t: 200, who: 'dps', text: '伊勢丹嗰邊有精英屍！' },
+      { t: 320, who: 'zb_u_shen', text: '喪屍王嚟喇！' },
+    ],
+    win: [
+      { who: 'narr', text: '東京嘅母體倒低。收音機入面，自衛隊嘅頻道傳嚟一句：「收到。多謝。」' },
+      { who: 'zb_r_kenji', text: '艙單最後一個港：大阪。' },
+      { who: 'narr', text: '第四部完。' },
+    ],
+    lose: '新宿御苑失守。再嚟過。',
   },
+
   // ======== 第五部：大阪 ========
   {
-    id: 'os0', title: '第十六章　最後一個港', mission: null, part: '第五部：大阪',
+    id: 'os0', title: '第十九章　最後一個港', mission: null, part: '第五部：大阪',
     intro: [
       { who: 'narr', text: '大阪港。海晏號嘅最後一批貨櫃，就喺呢度落。' },
       { who: 'zb_u_shen', text: 'Grace 筆記最後一頁：「最早嘅種，最大嘅母體」。' },
@@ -339,7 +396,7 @@ export const CHAPTERS = [
     win: [],
   },
   {
-    id: 'os1', title: '第十七章　道頓堀', mission: 'os-dotonbori', goal: '夜晚喺道頓堀撐 5 分鐘，同用刀嘅人會合',
+    id: 'os1', title: '第二十章　道頓堀', mission: 'os-dotonbori', goal: '夜晚喺道頓堀撐 5 分鐘，同用刀嘅人會合',
     intro: [
       { who: 'narr', text: '道頓堀。河兩邊嘅大招牌熄晒，河面浮住好多嘢。' },
       { who: 'dps', text: '河邊窄，橋上面好守。' },
@@ -358,7 +415,7 @@ export const CHAPTERS = [
     reward: { hero: 'zb_u_mio' },
   },
   {
-    id: 'os2', title: '第十八章　通天閣', mission: 'os-shinsekai', goal: '喺新世界撐 5 分鐘，打爆最大嘅母體',
+    id: 'os2', title: '第二十一章　通天閣', mission: 'os-shinsekai', goal: '喺新世界撐 5 分鐘，打爆最大嘅母體',
     intro: [
       { who: 'narr', text: '新世界。通天閣成座塔被肉膜包住，好似一條巨大嘅脈。' },
       { who: 'zb_u_shen', text: '最早嘅種。打低佢，艙單上面嘅所有巢都會失去源頭。' },
@@ -371,15 +428,34 @@ export const CHAPTERS = [
       { t: 270, who: 'zb_u_shen', text: '就係而家！' },
     ],
     win: [
-      { who: 'narr', text: '通天閣嘅肉膜一層層剝落。遠至香港、台北、東京，屍群同一刻停低。' },
+      { who: 'narr', text: '通天閣嘅肉膜剝落咗一半。但係最大嘅母體冇死，佢沿住地下街逃去道頓堀。' },
+      { who: 'zb_u_mio', text: '佢想由河出海。喺日本橋紮營，三路攻過去。' },
+      { who: 'narr', text: '大地圖「難波決戰」準備好。' },
+    ],
+    lose: '通天閣下面太危險。退返道頓堀，再嚟。',
+  },  {
+    id: 'os3', title: '第二十二章　難波決戰', mission: 'os-big', goal: '主城設喺日本橋，三路攻入道頓堀，打爆最大嘅母體',
+    intro: [
+      { who: 'narr', text: '日本橋。北面嘅道頓堀河上面，浮住一團好似心臟咁嘅嘢。' },
+      { who: 'zb_u_shen', text: '最後一次。由鹽埕一路到呢度。' },
+      { who: 'tank', text: '一個都唔准倒低。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_u_mio', text: '黑門市場嗰邊係上路，屍好密。' },
+      { t: 200, who: 'zb_r_kenji', text: '低頻聲好強，干擾頂唔住！' },
+      { t: 320, who: 'zb_s_fei', text: '喪屍王由戎橋過嚟！' },
+    ],
+    win: [
+      { who: 'narr', text: '道頓堀河上面嘅母體爆開。遠至香港、台北、東京，屍群同一刻停低。' },
       { who: 'control', text: '……完咗？' },
       { who: 'zb_u_shen', text: '艙單上面嘅都完咗。但係海晏號最初由邊度出發？' },
       { who: 'zb_s_ho', text: '……港灣市。' },
       { who: 'tank', text: '咁就去港灣市。' },
       { who: 'narr', text: '全部章節完。所有地圖可以自由出擊；港灣市篇，遲啲再講。' },
     ],
-    lose: '通天閣下面太危險。退返道頓堀，再嚟。',
+    lose: '日本橋主城失守。再嚟過。',
   },
+
 ];
 
 export const chapterById = id => CHAPTERS.find(c => c.id === id);
