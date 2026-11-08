@@ -11,6 +11,7 @@ import { createPois, updatePois, drawPois } from '../poi.js';
 import { createNight } from '../lighting.js';
 import { rescue } from '../rescue.js';
 import { drawZombies, drawSquad, drawEffects, drawLabels, applyCamera, worldTransform, toScreen, makeCam, zoomCam } from '../draw.js';
+import { structSprite, nestSprite, militiaSprite, frameOf, blit } from '../sprites.js';
 
 const TAU = Math.PI * 2;
 // 愛河：人手揀嘅位置（米，原點係範圍左上角；範圍中心 22.6262, 120.2858）
@@ -422,24 +423,25 @@ export function createBigScene(map, cfg = {}) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const s of structs) {
       if (!vis(s.x, s.y, 8)) continue;
-      const sz = s.kind === 'base' ? 5 : 2.5;
-      ctx.fillStyle = s.alive ? '#4f5a48' : '#2a2b27'; ctx.fillRect(s.x - sz, s.y - sz, sz * 2, sz * 2);
-      ctx.strokeStyle = st.help.has(s.id) && Math.sin(st.t * 10) > 0 ? '#d94a3a' : '#e8842c'; ctx.lineWidth = 0.4; ctx.strokeRect(s.x - sz, s.y - sz, sz * 2, sz * 2);
+      const sz = s.kind === 'base' ? 5 : 2.5, spr = structSprite(s.kind, s.alive);
+      ctx.drawImage(spr.img, s.x - sz * spr.ext, s.y - sz * spr.ext, sz * spr.ext * 2, sz * spr.ext * 2);
+      if (st.help.has(s.id) && Math.sin(st.t * 10) > 0) { ctx.strokeStyle = '#d94a3a'; ctx.lineWidth = 0.4; ctx.strokeRect(s.x - sz, s.y - sz, sz * 2, sz * 2); } // 求救閃紅
       if (s.alive) { ctx.fillStyle = '#111'; ctx.fillRect(s.x - sz, s.y - sz - 1.2, sz * 2, 0.5); ctx.fillStyle = '#cfc8b4'; ctx.fillRect(s.x - sz, s.y - sz - 1.2, sz * 2 * s.hp / s.maxHp, 0.5); }
       ctx.fillStyle = '#d9d6cc'; ctx.font = '900 1.2px "Noto Sans TC", sans-serif'; ctx.fillText(s.name, s.x, s.y + sz + 1.2);
       ctx.strokeStyle = 'rgba(232,132,44,.2)'; ctx.lineWidth = 0.15; ctx.beginPath(); ctx.arc(s.x, s.y, BIG[s.kind].range, 0, TAU); ctx.stroke();
     }
     // 敵方：屍巢、巢穴
     for (const z of horde.zombies) if (z.static && vis(z.x, z.y, 8)) {
-      ctx.fillStyle = z.invuln ? '#2e1a17' : '#4a1c18'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.fill();
-      ctx.strokeStyle = '#b3302a'; ctx.lineWidth = 0.4; ctx.stroke();
+      const spr = nestSprite(z.type, !!z.invuln), pulse = z.r * (1 + 0.035 * Math.sin(st.t * (z.type === 'nest' ? 2.2 : 3) + z.x)); // 一下下咁跳
+      ctx.drawImage(spr.img, z.x - pulse * spr.ext, z.y - pulse * spr.ext, pulse * spr.ext * 2, pulse * spr.ext * 2);
+      if (z.flash > 0) { ctx.fillStyle = 'rgba(217,201,176,.3)'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, TAU); ctx.fill(); }
       ctx.fillStyle = '#111'; ctx.fillRect(z.x - z.r, z.y - z.r - 1.4, z.r * 2, 0.6); ctx.fillStyle = '#b3302a'; ctx.fillRect(z.x - z.r, z.y - z.r - 1.4, z.r * 2 * z.hp / z.maxHp, 0.6);
       ctx.fillStyle = '#d9d6cc'; ctx.font = '900 1.3px "Noto Sans TC", sans-serif'; ctx.fillText(ZOMBIES[z.type].name + (z.invuln ? '（先打屍巢）' : ''), z.x, z.y + z.r + 1.4);
     }
     // 小兵、守備兵
-    ctx.beginPath();
-    for (const u of minions) if (vis(u.x, u.y)) { ctx.moveTo(u.x + 0.55, u.y); ctx.arc(u.x, u.y, 0.55, 0, TAU); }
-    ctx.fillStyle = st.buffT > 0 ? '#d9a060' : '#a8865a'; ctx.fill();
+    { const base = ctx.getTransform(), cloth = st.buffT > 0 ? '#8a6a3a' : '#6e6a52';
+      for (const u of minions) if (vis(u.x, u.y)) blit(ctx, base, militiaSprite(frameOf(st.t, u.x, 6), u.kind === 'soldier' ? '#4e5838' : cloth), u.x, u.y, 0.55, u.face || 0);
+      ctx.setTransform(base); }
     drawZombies(ctx, horde.zombies.filter(z => !z.static), vis, st.t);
     // 派咗去指定位置：地上插旗；揀咗嘅人有白圈
     for (const m of squad) {

@@ -1,6 +1,9 @@
 // 小地圖場景：一條真實街道就係一條跑道。小隊沿街向前衝，左右拖揀行邊邊；
 // 真實路口有門（射得嘅加人門、乘人、減人、武器），喪屍由真實橫街同騎樓湧出嚟；路上有油桶、物資箱、被困倖存者；街尾有屍王。
 import { ROLES, levelMul } from '../stats.js';
+import { zombieSprite, militiaSprite, frameOf, blit } from '../sprites.js';
+// 每隊兵嘅衫色（跟隊長職業）
+const TROOP_CLOTH = { tank: '#8a7350', medic: '#7d93a0', dps: '#56603e', control: '#bdb7a6', support: '#a8622e' };
 
 const TAU = Math.PI * 2;
 const LANE = 16;          // 跑道闊（米）
@@ -417,19 +420,25 @@ export function createStreetScene(map, cfg = {}) {
       }
       if ((it.kind === 'crate' || it.kind === 'cage' || it.kind === 'barrel') && it.hp < it.max) { ctx.fillStyle = '#111'; ctx.fillRect(x, y - 0.5 * z, w, 0.25 * z); ctx.fillStyle = '#cfc8b4'; ctx.fillRect(x, y - 0.5 * z, w * it.hp / it.max, 0.25 * z); }
     }
-    for (const zz of zombies) { // 喪屍
+    // 用同中、大地圖一樣嘅俯視圖：世界座標 x = u、y = -s（向上行）
+    const base = new DOMMatrix([dpr * z, 0, 0, dpr * z, dpr * W / 2, dpr * (H * 0.74 + st.s * z)]);
+    for (const zz of zombies) { // 喪屍：面向小隊
+      if (zz.v == null) zz.v = (Math.random() * 4) | 0;
+      const face = Math.atan2(-(st.s - zz.s), st.x - zz.u);
+      blit(ctx, base, zombieSprite(zz.type, zz.v, frameOf(st.t, zz.wob, zz.type === 'runner' ? 10 : 5)), zz.u, -zz.s, zz.r, face);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const zz of zombies) {
       const x = ux(zz.u), y = sy(zz.s), r = zz.r * z;
-      ctx.fillStyle = zz.flash > 0 ? '#d9c9b0' : zz.type === 'boss' ? '#521c19' : zz.type === 'brute' ? '#6a5236' : zz.type === 'runner' ? '#94402f' : '#7a3a30';
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-      ctx.strokeStyle = '#4a2420'; ctx.lineWidth = 0.2 * z;
-      ctx.beginPath(); ctx.moveTo(x - r * 0.7, y); ctx.lineTo(x - r * 0.8, y + r * 1.3 + Math.sin(st.t * 6 + zz.wob) * 2); ctx.moveTo(x + r * 0.7, y); ctx.lineTo(x + r * 0.8, y + r * 1.2); ctx.stroke();
+      if (zz.flash > 0) { ctx.fillStyle = 'rgba(217,201,176,.45)'; ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, TAU); ctx.fill(); }
       if (zz.type === 'boss' || zz.type === 'brute') { const bw = zz.r * 3.3 * z; ctx.fillStyle = '#111'; ctx.fillRect(x - bw / 2, y - r - z, bw, 0.5 * z); ctx.fillStyle = '#b3302a'; ctx.fillRect(x - bw / 2, y - r - z, bw * Math.max(0, zz.hp / zz.maxHp), 0.5 * z); }
     }
     caps.forEach((c, i) => { // 小隊
       if (!c.alive) return;
       const p = groupPos(c), cx = ux(p.u), cy = sy(p.s);
-      ctx.fillStyle = '#b8652a';
-      for (let k = 0; k < Math.min(c.n, 80); k++) { const a = k * 2.4, rr = 0.9 + Math.sqrt(k) * 0.42; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rr * z, cy + Math.abs(Math.sin(a)) * rr * z, 0.38 * z, 0, TAU); ctx.fill(); }
+      { const cloth = TROOP_CLOTH[c.role] || '#6e6a52'; // 小兵：細細個民兵，面向前
+        for (let k = 0; k < Math.min(c.n, 80); k++) { const a = k * 2.4, rr = 0.9 + Math.sqrt(k) * 0.42; blit(ctx, base, militiaSprite(frameOf(st.t, k, 7), cloth), p.u + Math.cos(a) * rr, -(p.s - Math.abs(Math.sin(a)) * rr), 0.5, -Math.PI / 2); }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
       ctx.fillStyle = st.target === i ? '#f2c27a' : '#e8842c';
       ctx.beginPath(); ctx.arc(cx, cy, 0.8 * z, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#1c1410'; ctx.lineWidth = 0.15 * z; ctx.stroke();

@@ -1,41 +1,25 @@
 // 共用畫圖：喪屍、隊員、特效、街道名、集火準星。三個地圖都用（世界座標，單位米）。
 const TAU = Math.PI * 2;
-const Z_TYPES = ['walker', 'runner', 'fat', 'screamer', 'elite', 'boss', 'king'];
-const Z_COLOR = { walker: '#7a3a30', runner: '#94402f', fat: '#6a5236', screamer: '#8a4a5a', elite: '#5a2a24', boss: '#521c19', king: '#3e1412' };
+import { zombieSprite, humanSprite, frameOf, blit, Z_VARIANTS } from './sprites.js';
 export const ROLE_MARK = { player: '你', tank: '坦', medic: '醫', dps: '輸', control: '控', support: '援' };
 
+// 喪屍：每隻一張俯視圖（有幾套衫、三格行路），轉向貼上去
 export function drawZombies(ctx, zombies, vis, t) {
-  for (const type of Z_TYPES) {
-    ctx.beginPath();
-    let any = false;
-    for (const z of zombies) if (z.type === type && vis(z.x, z.y)) { ctx.moveTo(z.x + z.r, z.y); ctx.arc(z.x, z.y, z.r, 0, TAU); any = true; }
-    if (!any) continue;
-    ctx.fillStyle = Z_COLOR[type]; ctx.fill();
-    ctx.lineWidth = 0.12; ctx.strokeStyle = '#1a0f0d'; ctx.stroke();
-  }
-  ctx.beginPath(); // 手：一長一短，歪歪斜斜
+  const base = ctx.getTransform();
   for (const z of zombies) {
     if (!vis(z.x, z.y)) continue;
-    const c = Math.cos(z.face), sn = Math.sin(z.face), w = Math.sin(t * 6 + z.wob) * 0.15;
-    for (const side of [-1, 1]) {
-      const sx = z.x - sn * z.r * 0.7 * side, sy = z.y + c * z.r * 0.7 * side, l = z.r * (1.25 + w * side + (side > 0 ? 0.15 : -0.1));
-      ctx.moveTo(sx, sy); ctx.lineTo(sx + c * l - sn * 0.15 * side, sy + sn * l + c * 0.15 * side);
-    }
+    if (z.v == null) z.v = (Math.random() * Z_VARIANTS) | 0;
+    const big = z.type === 'boss' || z.type === 'king' || z.type === 'elite' || z.type === 'fat';
+    const f = frameOf(t * (z.slowT > 0 ? 0.5 : 1), z.wob, z.type === 'runner' ? 10 : big ? 3.5 : 5);
+    blit(ctx, base, zombieSprite(z.type, z.v, f), z.x, z.y, z.r, z.face);
   }
-  ctx.lineWidth = 0.2; ctx.strokeStyle = '#4a2420'; ctx.stroke();
-  ctx.beginPath(); // 頭（歪少少）
-  for (const z of zombies) {
-    if (!vis(z.x, z.y)) continue;
-    const a = z.face + Math.sin(z.wob) * 0.4, hx = z.x + Math.cos(a) * z.r * 0.25, hy = z.y + Math.sin(a) * z.r * 0.25;
-    ctx.moveTo(hx + z.r * 0.45, hy); ctx.arc(hx, hy, z.r * 0.45, 0, TAU);
-  }
-  ctx.fillStyle = '#3a1c18'; ctx.fill();
+  ctx.setTransform(base);
   ctx.beginPath(); // 減慢中：灰藍點
   for (const z of zombies) if (z.slowT > 0 && vis(z.x, z.y)) { ctx.moveTo(z.x + 0.25, z.y - z.r); ctx.arc(z.x, z.y - z.r, 0.25, 0, TAU); }
   ctx.fillStyle = '#6f8aa6'; ctx.fill();
   ctx.beginPath(); // 中槍閃
-  for (const z of zombies) if (z.flash > 0 && vis(z.x, z.y)) { ctx.moveTo(z.x + z.r, z.y); ctx.arc(z.x, z.y, z.r, 0, TAU); }
-  ctx.fillStyle = 'rgba(217,201,176,.55)'; ctx.fill();
+  for (const z of zombies) if (z.flash > 0 && vis(z.x, z.y)) { ctx.moveTo(z.x + z.r * 0.8, z.y); ctx.arc(z.x, z.y, z.r * 0.8, 0, TAU); }
+  ctx.fillStyle = 'rgba(217,201,176,.45)'; ctx.fill();
   for (const z of zombies) if ((z.type === 'boss' || z.type === 'king' || z.type === 'elite') && vis(z.x, z.y)) { // 大隻嘢有血條
     const w = z.r * 2.4;
     ctx.fillStyle = '#111'; ctx.fillRect(z.x - w / 2, z.y - z.r - 1, w, 0.4);
@@ -43,38 +27,44 @@ export function drawZombies(ctx, zombies, vis, t) {
   }
 }
 
-// 隊員（連倒地）。marks：畫唔畫字
+// 隊員：腳下橙色圈（一眼分到自己人）、俯視人物（按職業：消防衣、護士服、軍裝、實驗袍、外送員）、頭頂名牌同血條
 export function drawSquad(ctx, squad, player, vis) {
+  const base = ctx.getTransform(), now = performance.now() / 1000;
   for (const m of squad) {
     if (m.state === 'ok' || !vis(m.x, m.y) || m.away) continue;
-    ctx.fillStyle = m.state === 'dead' ? '#2f2c29' : '#6b6560';
-    ctx.beginPath(); ctx.ellipse(m.x, m.y, m.r * 1.3, m.r * 0.8, 0.5, 0, TAU); ctx.fill();
-    if (m.state === 'down') {
-      ctx.lineWidth = 0.22;
-      ctx.strokeStyle = '#b3302a';
-      ctx.beginPath(); ctx.arc(m.x, m.y, 1.5, -Math.PI / 2, -Math.PI / 2 + TAU * m.bleed / 20); ctx.stroke();
-      if (m.revive > 0) { ctx.strokeStyle = '#d9d6cc'; ctx.beginPath(); ctx.arc(m.x, m.y, 1.9, -Math.PI / 2, -Math.PI / 2 + TAU * m.revive); ctx.stroke(); }
-    }
+    if (m.state === 'dead') { ctx.fillStyle = '#2f2c29'; ctx.beginPath(); ctx.ellipse(m.x, m.y, m.r * 1.3, m.r * 0.8, 0.5, 0, TAU); ctx.fill(); continue; }
+    ctx.globalAlpha = 0.6; // 倒地：瞓低
+    blit(ctx, base, humanSprite(m.role, 0), m.x, m.y, m.r, m.face + Math.PI / 2);
+    ctx.setTransform(base); ctx.globalAlpha = 1;
+    ctx.lineWidth = 0.22; ctx.strokeStyle = '#b3302a';
+    ctx.beginPath(); ctx.arc(m.x, m.y, 1.5, -Math.PI / 2, -Math.PI / 2 + TAU * m.bleed / 20); ctx.stroke();
+    if (m.revive > 0) { ctx.strokeStyle = '#d9d6cc'; ctx.beginPath(); ctx.arc(m.x, m.y, 1.9, -Math.PI / 2, -Math.PI / 2 + TAU * m.revive); ctx.stroke(); }
   }
+  for (const m of squad) { // 腳下圈
+    if (m.state !== 'ok' || !vis(m.x, m.y) || m.away) continue;
+    ctx.strokeStyle = m === player ? 'rgba(242,194,122,.85)' : 'rgba(232,132,44,.6)'; ctx.lineWidth = m === player ? 0.16 : 0.12;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 1.35, 0, TAU); ctx.stroke();
+    if (m.ult >= 1) { ctx.strokeStyle = '#d9d6cc'; ctx.lineWidth = 0.1; ctx.setLineDash([0.3, 0.3]); ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 1.7, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  for (const m of squad) { // 人
+    if (m.state !== 'ok' || !vis(m.x, m.y) || m.away) continue;
+    const moved = Math.hypot(m.x - (m._lx ?? m.x), m.y - (m._ly ?? m.y)) > 0.002;
+    m._lx = m.x; m._ly = m.y;
+    if (moved) m._walk = (m._walk || 0) + 1;
+    const f = moved ? frameOf(now, m.r * 7, 7) : 0;
+    blit(ctx, base, humanSprite(m.role, f), m.x, m.y, m.r, m.face);
+  }
+  ctx.setTransform(base);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '900 0.85px "Noto Sans TC", sans-serif';
+  ctx.font = '900 0.7px "Noto Sans TC", sans-serif';
   for (const m of squad) {
     if (m.state !== 'ok' || !vis(m.x, m.y) || m.away) continue;
-    const c = Math.cos(m.face), sn = Math.sin(m.face);
-    if (m === player) { ctx.strokeStyle = 'rgba(232,132,44,.45)'; ctx.lineWidth = 0.15; ctx.beginPath(); ctx.arc(m.x, m.y, 1.25, 0, TAU); ctx.stroke(); }
-    if (m.ult >= 1) { ctx.strokeStyle = '#d9d6cc'; ctx.lineWidth = 0.1; ctx.setLineDash([0.3, 0.3]); ctx.beginPath(); ctx.arc(m.x, m.y, 1.0, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
-    ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.face);
-    if (m.role === 'tank') { ctx.fillStyle = '#7d7f78'; ctx.fillRect(0.55, -0.85, 0.35, 1.7); }               // 盾
-    else if (m.role === 'control') { ctx.fillStyle = '#5a3a2a'; ctx.fillRect(-0.95, -0.35, 0.4, 0.7); ctx.fillStyle = '#151515'; ctx.fillRect(0.3, -0.12, 0.9, 0.24); } // 背住油罐、噴嘴
-    else if (m.role === 'support') { ctx.fillStyle = '#151515'; ctx.fillRect(0.3, -0.08, 1.7, 0.16); ctx.fillStyle = '#8a6a3a'; ctx.fillRect(-0.95, -0.45, 0.45, 0.9); } // 長狙、外送箱
-    else { ctx.fillStyle = '#151515'; ctx.fillRect(0.3, -0.11, m.role === 'dps' ? 1.2 : 0.8, 0.22); }
-    ctx.restore();
-    ctx.fillStyle = m.flash > 0 ? '#b3302a' : m === player ? '#e8842c' : '#c46a28';
-    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
-    ctx.lineWidth = 0.13; ctx.strokeStyle = '#1c1410'; ctx.stroke();
-    if (m.role === 'medic') { ctx.fillStyle = '#d9d6cc'; ctx.fillRect(m.x - 0.55, m.y - 0.12, 0.25, 0.24); } // 手臂十字
-    ctx.fillStyle = '#1c1410';
-    ctx.fillText(m.glyph || ROLE_MARK[m.role], m.x, m.y + 0.05);
+    if (m.flash > 0) { ctx.fillStyle = 'rgba(179,48,42,.45)'; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill(); }
+    // 名牌：細方塊寫一個字
+    const ty = m.y - 1.95;
+    ctx.fillStyle = m === player ? '#e8842c' : m.guest ? '#d9a060' : '#c46a28';
+    ctx.fillRect(m.x - 0.45, ty - 0.38, 0.9, 0.76);
+    ctx.fillStyle = '#1c1410'; ctx.fillText(m.glyph || ROLE_MARK[m.role], m.x, ty + 0.03);
     const ratio = m.hp / m.maxHp; // 血條
     ctx.fillStyle = '#111'; ctx.fillRect(m.x - 0.9, m.y - 1.45, 1.8, 0.28);
     ctx.fillStyle = ratio < 0.3 ? '#b3302a' : '#cfc8b4'; ctx.fillRect(m.x - 0.9, m.y - 1.45, 1.8 * ratio, 0.28);
