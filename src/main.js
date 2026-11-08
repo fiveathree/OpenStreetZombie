@@ -7,6 +7,7 @@ import { createBigScene } from './scenes/big.js';
 import { MATCH_TIME, xpNeed, rollUpgrades, activeBonds, heroXpNeed, heroLevelCost, RES_NAMES, TREAT_COST, ULT_BOOST_LEVEL, BIG } from './stats.js';
 import { loadSave, writeSave, resetSave, canLevel, levelUp, treat, recruit, canRecruit, recruitNeed, owned, unlockAll, applyResult } from './save.js';
 import { loadCast, hero, castList, CORE, rollSurvivor, factionBonds } from './heroes.js';
+import { currentChapter, completeChapter } from './story.js';
 
 const $ = s => document.querySelector(s);
 const canvas = $('#c'), ctx = canvas.getContext('2d', { alpha: false });
@@ -92,11 +93,63 @@ function showTitle() {
   $('#go').focus();
 }
 
+// ---- 劇情對白 ----
+const SPEAKER = { narr: { name: '' }, radio: { name: '無線電', glyph: '訊' }, you: { name: '你', glyph: '你' } };
+function speaker(who) {
+  if (SPEAKER[who]) return SPEAKER[who];
+  const H = hero(who);
+  return { name: H?.name || who, glyph: H?.glyph || [...(H?.name || '？')].find(c => c !== '阿' && c !== '小' && c !== ' ') };
+}
+const fillText = t => t.replace('{street}', maps.big ? pickStreet(maps.big, day).name : '大街');
+let talkKey = null;
+addEventListener('keydown', e => { if (mode === 'talk' && talkKey) talkKey(e); });
+// lines：[{ who, text }]；播完叫 done()
+function playScene(title, lines, done) {
+  if (!lines?.length) return done();
+  setMode('talk');
+  let i = 0;
+  let ended = false;
+  const finish = () => { if (ended) return; ended = true; card.onclick = null; talkKey = null; done(); };
+  const next = () => { if (++i >= lines.length) finish(); else show(); };
+  function show() {
+    const L = lines[i], S = speaker(L.who);
+    const cls = L.who === 'radio' ? 'radio' : L.who === 'you' ? 'you' : '';
+    card.className = 'card talk' + (L.who === 'narr' ? ' narr' : '');
+    card.innerHTML = `<p class="eyebrow">${esc(title)}・${i + 1}/${lines.length}</p>
+      ${L.who === 'narr' ? '' : `<div class="who"><i class="${cls}">${esc(S.glyph || '')}</i><b>${esc(S.name)}</b></div>`}
+      <p class="line">${esc(fillText(L.text))}</p>
+      <div class="talkbar"><button class="go" id="next">${i + 1 < lines.length ? '下一句' : '繼續'}</button><button class="link" id="skip">略過</button></div>`;
+    ov.hidden = false;
+    $('#next').onclick = e => { e.stopPropagation(); next(); };
+    $('#skip').onclick = e => { e.stopPropagation(); finish(); };
+    $('#next').focus();
+  }
+  setTimeout(() => { card.onclick = () => next(); }, 0); // 等開對白嗰下撳完先接，唔係會跳過第一句
+  talkKey = e => { if (e.key === 'Escape') finish(); };
+  show();
+}
+
+// 冇出擊嘅章（序章、第四章）：入安全屋時自動播
+function storyAuto() {
+  const ch = currentChapter(save);
+  if (!ch || ch.mission) return false;
+  playScene(ch.title, ch.intro, () => { finishChapter(ch); showSafehouse(ch.reward?.hero ? `${esc(hero(ch.reward.hero)?.name || "新隊友")} 加入咗隊伍！` : ''); });
+  return true;
+}
+function finishChapter(ch) {
+  completeChapter(save, ch.id);
+  const r = ch.reward?.hero;
+  if (r) { save.heroes[r] ||= { lvl: 1, xp: 0, injured: false, owned: false, shards: 0 }; save.heroes[r].owned = true; }
+  writeSave(save);
+}
+
 // ---- 安全屋 ----
 const ROLE_LABEL = { tank: '坦克', medic: '醫療', dps: '輸出', control: '控場', support: '支援' };
 function teamIds() { return save.team.filter(id => save.heroes[id]?.owned && hero(id)).slice(0, 3); }
 function showSafehouse(msg) {
+  if (storyAuto()) return;
   setMode('safe');
+  const chap = currentChapter(save);
   const team = teamIds();
   const bonds = [...activeBonds(team).map(b => b.name), ...factionBonds(team).map(f => `陣營：${f.name}`)];
   const street = maps.big ? pickStreet(maps.big, day).name : '今日嘅街';
@@ -118,10 +171,14 @@ function showSafehouse(msg) {
     .sort((a, b) => (save.heroes[b].shards / recruitNeed(b)) - (save.heroes[a].shards / recruitNeed(a)));
   const rchip = id => { const H = hero(id), h = save.heroes[id], need = recruitNeed(id); return `<button class="chip rec" data-act="recruit" data-r="${id}" ${canRecruit(save, id) ? '' : 'disabled'} title="${esc(H.bio || H.job)}">${tag(H)}${esc(H.name)}<span>${ROLE_LABEL[H.role]}・碎片 ${h.shards}/${need}</span></button>`; };
   const zbOwned = owned(save).filter(id => !CORE[id]).length;
-  const mission = (id, title, desc, ok, why) => `<button class="mission" data-go="${id}" ${ok ? '' : 'disabled'}><b>${title}</b><span>${ok ? desc : why}</span></button>`;
+  const mission = (id, title, desc, ok, why) => {
+    const main = chap?.mission === id, open = ok || main;
+    return `<button class="mission${main ? ' main' : ''}" data-go="${id}" ${open ? '' : 'disabled'}>${main ? '<em>主線</em>' : ''}<b>${title}</b><span>${open ? desc : why}</span></button>`;
+  };
   card.className = 'card wide';
   card.innerHTML = `
     <p class="eyebrow">安全屋・第 ${save.runs + 1} 次出擊</p>
+    ${chap ? `<div class="quest"><b>主線　${esc(chap.title)}</b><span>${esc(fillText(chap.goal || ''))}</span></div>` : '<div class="quest"><b>主線：第一部完</b><span>所有地圖可以自由出擊</span></div>'}
     <div class="res">${resRow}</div>
     <h3>出擊隊伍（3 個；大地圖會多帶 1 個後備）</h3>
     <div class="heroes">${team.map(teamCard).join('')}${empty.repeat(Math.max(0, 3 - team.length))}</div>
@@ -149,13 +206,25 @@ function showSafehouse(msg) {
     else if (act === 'recruit') { if (recruit(save, id)) { save.team = [...teamIds(), id].slice(-3); writeSave(save); return showSafehouse(`${esc(hero(id).name)} 加入咗！`); } }
     showSafehouse();
   }));
-  card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => start(b.dataset.go));
+  card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => startMission(b.dataset.go));
   $('#cheat').onclick = () => { unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
   $('#wipe').onclick = () => { if (confirm('重置存檔？所有進度會清走。')) { save = resetSave(); showSafehouse('存檔已重置。'); } };
 }
 
 // ---- 開波 ----
-async function start(id) {
+// 主線嗰章：第一次出擊先播對白
+async function startMission(id) {
+  const ch = currentChapter(save);
+  if (ch?.mission !== id) return start(id, null);
+  if (id === 'street') await getMap('big'); // 對白要用今日條街嘅名
+  save.story ||= { done: [] };
+  save.story.seen ||= {};
+  const first = !save.story.seen[ch.id];
+  save.story.seen[ch.id] = true;
+  writeSave(save);
+  playScene(ch.title, first ? ch.intro : [], () => start(id, ch));
+}
+async function start(id, chapter = null) {
   const team = teamIds();
   if (team.length < 1) { showSafehouse('最少要揀 1 個隊友。'); return; }
   card.innerHTML = '<p>載入緊地圖…</p>';
@@ -182,6 +251,7 @@ async function start(id) {
   setMode('play', scene.kind);
   ov.hidden = true;
   sel = -1; $('#selHint').hidden = true;
+  runInfo.chapter = chapter; runInfo.cues = new Set();
   buildHud();
 }
 
@@ -223,9 +293,13 @@ function showEnd() {
   const title = kind === 'street' ? (win ? `衝到 ${esc(s.street)} 街尾！` : '小隊全滅') : kind === 'big' ? (win ? '打爆咗喪屍巢穴！愛河兩岸安全' : '主城失守') : (win ? `過關！${esc(MIDS[runInfo.id].name)}暫時安全` : '全軍覆沒');
   const stat = kind === 'street' ? `<div><span>跑咗</span><b>${Math.round(s.s)} 米</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`
     : `<div><span>${kind === 'big' ? '打咗' : '撐咗'}</span><b>${mmss(s.t)}</b></div><div><span>擊殺</span><b>${s.kills}</b></div>`;
+  const ch = runInfo.chapter;
+  if (ch && win) finishChapter(ch);
   card.className = 'card';
   card.innerHTML = `
     <p class="eyebrow">${win ? '任務完成' : '任務失敗・資源只帶返一半'}</p>
+    ${ch ? `<p class="msg">${win ? '主線完成：' + esc(ch.title) : esc(ch.lose || '')}</p>` : ''}
+    ${ch && win && ch.reward?.hero ? `<p class="msg">${esc(hero(ch.reward.hero)?.name || "新隊友")} 加入咗隊伍！</p>` : ''}
     <h2>${title}</h2>
     <div class="res">${stat}${Object.entries(got).filter(([, v]) => v).map(([k, v]) => `<div><span>${RES_NAMES[k]}</span><b>+${v}</b></div>`).join('')}${shards ? `<div><span>通用碎片</span><b>+${shards}</b></div>` : ''}</div>
     <p>每個隊友經驗 +${Math.round(xp)}。${hurtNow.length ? `受傷：${esc(hurtNow.join('、'))}（下一場抖一場，或者帶傷上陣）` : ''}</p>
@@ -235,7 +309,7 @@ function showEnd() {
     ${kind === 'mid' && win && runInfo.id === 'qixian' ? '<p class="msg">兩個街區都佔領咗：大地圖「愛河大戰」開放！</p>' : ''}
     <button class="go" id="go">返安全屋</button>`;
   ov.hidden = false;
-  $('#go').onclick = () => { scene = backdrop; showSafehouse(); };
+  $('#go').onclick = () => { scene = backdrop; if (ch && win) playScene(ch.title, ch.win, () => showSafehouse()); else showSafehouse(); };
   $('#go').focus();
 }
 
@@ -355,10 +429,20 @@ mm.addEventListener('pointerup', mmEnd);
 mm.addEventListener('pointercancel', mmEnd);
 $('#lookBack').addEventListener('pointerdown', e => { e.preventDefault(); scene?.lookBack?.(); });
 
-let hudT = 0, toastT = 0;
+let hudT = 0, toastT = 0, radioT = 0;
+// 打緊嘅時候，隊友用無線電講嘢（唔會停低遊戲）
+function radioSay(c) {
+  const S = speaker(c.who), el = $('#radio');
+  el.innerHTML = `<b>${esc(S.name)}</b>${esc(fillText(c.text))}`;
+  el.hidden = false;
+  radioT = 6;
+}
 const toastQ = [];
 function hud(dt) {
   const s = scene.state;
+  const ch = runInfo?.chapter;
+  if (ch?.radio) for (const c of ch.radio) if (!runInfo.cues.has(c) && ((c.t != null && s.t >= c.t) || (c.s != null && s.s >= c.s))) { runInfo.cues.add(c); radioSay(c); }
+  if (radioT > 0 && (radioT -= dt) <= 0) $('#radio').hidden = true;
   if (s.toasts?.length) { toastQ.push(...s.toasts); s.toasts.length = 0; if (toastQ.length > 3) toastQ.splice(0, toastQ.length - 3); }
   if (toastT > 0) toastT -= dt;
   if (toastT <= 0 && toastQ.length) { $('#toast').textContent = toastQ.shift(); $('#toast').classList.add('show'); toastT = 1.8; }

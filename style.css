@@ -194,3 +194,24 @@ body.m-big #squad li:not(.r-player) { cursor: pointer; }
 #squad li.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
 #selHint { position: fixed; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); max-width: min(520px, 92vw); background: var(--panel); border: 1px solid var(--ink); color: var(--ink); font-size: 13px; padding: 5px 10px; pointer-events: none; }
 body.m-big #selHint.hud[hidden] { display: none !important; }
+
+/* 劇情 */
+.card.talk { max-width: 560px; cursor: pointer; }
+.card.talk .who { display: flex; align-items: center; gap: 10px; }
+.card.talk .who i { width: 44px; height: 44px; border-radius: 50%; background: #c46a28; color: #1c1410; display: grid; place-items: center; font: 900 20px var(--display); font-style: normal; border: 2px solid #1c1410; }
+.card.talk .who i.you { background: var(--signal); }
+.card.talk .who i.radio { background: #3a4248; color: var(--ink); font-size: 16px; }
+.card.talk .who b { font-size: 18px; font-weight: 900; }
+.card.talk .line { color: var(--ink) !important; font-size: 18px !important; line-height: 1.7 !important; min-height: 3.4em; }
+.card.talk.narr .line { color: var(--dim) !important; font-style: italic; }
+.talkbar { display: flex; align-items: center; gap: 16px; }
+.quest { border: 1px solid var(--rust); background: #24180f; padding: 6px 10px; display: grid; gap: 2px; }
+.quest b { color: var(--signal); font-size: 14px; }
+.quest span { font-size: 12px; color: var(--ink); }
+.mission.main { border-color: var(--signal); background: #2a2017; position: relative; }
+.mission em { position: absolute; right: 8px; top: 6px; font: 900 11px var(--display); font-style: normal; color: #15100c; background: var(--signal); padding: 0 5px; }
+#radio { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(120px + var(--safe-b)); width: max-content; max-width: min(560px, 90vw); background: rgba(20, 24, 26, .94); border: 1px solid var(--line); border-left: 4px solid var(--signal); padding: 6px 12px; font-size: 14px; line-height: 1.5; pointer-events: none; }
+#radio b { color: var(--signal); margin-right: 8px; }
+body.m-mid #radio.hud[hidden], body.m-big #radio.hud[hidden], body.m-street #radio.hud[hidden] { display: none !important; }
+body.m-mid #radio.hud:not([hidden]), body.m-big #radio.hud:not([hidden]), body.m-street #radio.hud:not([hidden]) { display: block !important; }
+body.m-street #radio { bottom: calc(190px + var(--safe-b)); }
