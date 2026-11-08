@@ -216,6 +216,12 @@ export function createMidScene(map, cfg = {}) {
     }
     ctx.drawImage(mmBase, 0, 0);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${5.5 * f}px "Noto Sans TC", sans-serif`;
+    for (const [i, l] of map.landmarks.entries()) { // 地標：金色菱形；頭幾個重要嘅寫埋名
+      const x = l.x * k, y = l.y * k, d = 3 * f;
+      ctx.fillStyle = '#e8b45a'; ctx.beginPath(); ctx.moveTo(x, y - d); ctx.lineTo(x + d, y); ctx.lineTo(x, y + d); ctx.lineTo(x - d, y); ctx.fill();
+      if (i < 5) { ctx.fillStyle = 'rgba(232,180,90,.85)'; ctx.fillText(l.name.length > 7 ? l.name.slice(0, 7) + '…' : l.name, x, y - 7 * f); }
+    }
     for (const p of pois) { const x = (p.sx ?? p.x) * k, y = (p.sy ?? p.y) * k, s = 5 * f; ctx.fillStyle = POIS[p.type].color; ctx.fillRect(x - s / 2, y - s / 2, s, s); }
     ctx.fillStyle = '#d94a3a';
     for (const z of horde.zombies) { const s = (z.type === 'boss' || z.type === 'king' ? 5 : 2) * f; ctx.fillRect(z.x * k - s / 2, z.y * k - s / 2, s, s); }

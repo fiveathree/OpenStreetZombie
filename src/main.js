@@ -7,7 +7,7 @@ import { createBigScene } from './scenes/big.js';
 import { MATCH_TIME, xpNeed, rollUpgrades, activeBonds, heroXpNeed, heroLevelCost, RES_NAMES, TREAT_COST, ULT_BOOST_LEVEL, BIG } from './stats.js';
 import { loadSave, writeSave, resetSave, canLevel, levelUp, treat, recruit, canRecruit, recruitNeed, owned, unlockAll, applyResult } from './save.js';
 import { loadCast, hero, castList, CORE, rollSurvivor, factionBonds } from './heroes.js';
-import { currentChapter, completeChapter } from './story.js';
+import { CHAPTERS, currentChapter, completeChapter } from './story.js';
 
 const $ = s => document.querySelector(s);
 const canvas = $('#c'), ctx = canvas.getContext('2d', { alpha: false });
@@ -18,11 +18,35 @@ const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const day = Math.floor(Date.now() / 86400000);
 
-// 中地圖兩個街區：過咗第一個先開第二個；兩個都過咗開大地圖
+// 中地圖：按城市分。主線嘅地圖跟劇情解鎖；need = 要先過咗邊張圖
+const CITIES = [['kh', '高雄'], ['hk', '香港'], ['tp', '台北'], ['tk', '東京'], ['os', '大阪']];
 const MIDS = {
-  yancheng: { file: 'data/yancheng.json', name: '鹽埕街區', desc: '白天・藥房多', hard: 1.4, night: false },
-  qixian: { file: 'data/qixian.json', name: '七賢路街區', desc: '夜晚・有警局同油站', hard: 1.6, night: true, need: 'yancheng' },
+  yancheng: { city: 'kh', name: '鹽埕街區', desc: '白天・藥房多', hard: 1.4 },
+  qixian: { city: 'kh', name: '七賢路街區', desc: '夜晚・有警局同油站', hard: 1.6, night: true, need: 'yancheng' },
+  'kh-liuhe': { city: 'kh', name: '六合夜市', desc: '夜晚・夜市攤檔、美麗島站', hard: 1.6, night: true, need: 'big' },
+  'kh-cijin': { city: 'kh', name: '旗津老街', desc: '白天・海邊廟街', hard: 1.5, need: 'big' },
+  'hk-mongkok': { city: 'hk', name: '旺角', desc: '白天・唐樓窄街', hard: 1.5 },
+  'hk-tst': { city: 'hk', name: '尖沙咀', desc: '夜晚・海旁鐘樓', hard: 1.7, night: true },
+  'hk-central': { city: 'hk', name: '中環', desc: '白天・斜路同石板街', hard: 1.75 },
+  'tp-ximen': { city: 'tp', name: '西門町', desc: '白天・紅樓行人區', hard: 1.8 },
+  'tp-xinyi': { city: 'tp', name: '信義・101', desc: '夜晚・大廣場', hard: 1.85, night: true },
+  'tk-shibuya': { city: 'tk', name: '澀谷', desc: '白天・十字路口', hard: 1.9 },
+  'tk-shinjuku': { city: 'tk', name: '新宿歌舞伎町', desc: '夜晚・窄巷', hard: 1.95, night: true },
+  'os-dotonbori': { city: 'os', name: '道頓堀', desc: '夜晚・河邊招牌街', hard: 2, night: true },
+  'os-shinsekai': { city: 'os', name: '新世界・通天閣', desc: '白天・通天閣', hard: 2.05 },
 };
+for (const id in MIDS) MIDS[id].file = `data/${id}.json`;
+// 開唔開：過咗就開；有 need 就睇 need；主線地圖要之前嘅章節全部做完
+function mapOpen(id) {
+  const M = MIDS[id];
+  if (save.cleared[id]) return true;
+  if (M.need) return !!save.cleared[M.need];
+  const i = CHAPTERS.findIndex(c => c.mission === id);
+  const done = new Set(save.story?.done || []);
+  return i < 0 || CHAPTERS.slice(0, i).every(c => done.has(c.id));
+}
+const cityOpen = c => Object.keys(MIDS).some(id => MIDS[id].city === c && mapOpen(id));
+let cityTab = null; // 安全屋揀緊邊個城市；null = 跟主線
 const CMDS = {
   mid: [['follow', '跟我'], ['spread', '散開'], ['hold', '守住'], ['focus', '集火']],
   big: [['top', '推上路'], ['mid', '推中路'], ['bot', '推下路'], ['base', '守主城'], ['follow', '集合'], ['boss', '打 Boss']],
@@ -150,6 +174,7 @@ function showSafehouse(msg) {
   if (storyAuto()) return;
   setMode('safe');
   const chap = currentChapter(save);
+  const tab = cityTab || MIDS[chap?.mission]?.city || 'kh';
   const team = teamIds();
   const bonds = [...activeBonds(team).map(b => b.name), ...factionBonds(team).map(f => `陣營：${f.name}`)];
   const street = maps.big ? pickStreet(maps.big, day).name : '今日嘅街';
@@ -178,7 +203,7 @@ function showSafehouse(msg) {
   card.className = 'card wide';
   card.innerHTML = `
     <p class="eyebrow">安全屋・第 ${save.runs + 1} 次出擊</p>
-    ${chap ? `<div class="quest"><b>主線　${esc(chap.title)}</b><span>${esc(fillText(chap.goal || ''))}</span></div>` : '<div class="quest"><b>主線：第一部完</b><span>所有地圖可以自由出擊</span></div>'}
+    ${chap ? `<div class="quest"><b>主線　${esc(chap.title)}</b><span>${esc(fillText(chap.goal || ''))}</span></div>` : '<div class="quest"><b>主線：全部章節完</b><span>所有地圖可以自由出擊</span></div>'}
     <div class="res">${resRow}</div>
     <h3>出擊隊伍（3 個；大地圖會多帶 1 個後備）</h3>
     <div class="heroes">${team.map(teamCard).join('')}${empty.repeat(Math.max(0, 3 - team.length))}</div>
@@ -187,11 +212,11 @@ function showSafehouse(msg) {
     ${recruitable.length ? `<div class="chips"><small>招募</small>${recruitable.slice(0, 8).map(rchip).join('')}</div>` : ''}
     <p class="tiny">屍城日誌角色：已招募 ${zbOwned}/${castList().length}。救倖存者有佢哋嘅專屬碎片，運氣好仲會即刻加入幫手。</p>
     <h3>出擊</h3>
+    <div class="cities">${CITIES.map(([c, n]) => `<button class="city${c === tab ? ' on' : ''}" data-city="${c}" ${cityOpen(c) ? '' : 'disabled'}>${n}${cityOpen(c) ? '' : '<small>未開</small>'}</button>`).join('')}</div>
     <div class="missions">
       ${mission('street', '小地圖：街道衝鋒', `今日：${esc(street)}・1–2 分鐘・賺資源同碎片`, true)}
-      ${mission('yancheng', '中地圖：' + MIDS.yancheng.name + (save.cleared.yancheng ? ' ✓' : ''), MIDS.yancheng.desc + '・撐 5 分鐘', true)}
-      ${mission('qixian', '中地圖：' + MIDS.qixian.name + (save.cleared.qixian ? ' ✓' : ''), MIDS.qixian.desc + '・撐 5 分鐘', save.cleared.yancheng, '過咗鹽埕街區先開')}
-      ${mission('big', '大地圖：愛河大戰' + (save.cleared.big ? ' ✓' : ''), '三路經愛河三條橋・打爆東岸巢穴', save.cleared.qixian, '兩個街區都過咗先開')}
+      ${Object.entries(MIDS).filter(([, M]) => M.city === tab).map(([id, M]) => mission(id, '中地圖：' + M.name + (save.cleared[id] ? ' ✓' : ''), M.desc + '・撐 5 分鐘', mapOpen(id), M.need ? `過咗${M.need === 'big' ? '愛河大戰' : MIDS[M.need].name}先開` : '跟主線解鎖')).join('')}
+      ${tab === 'kh' ? mission('big', '大地圖：愛河大戰' + (save.cleared.big ? ' ✓' : ''), '三路經愛河三條橋・打爆東岸巢穴', save.cleared.qixian, '兩個街區都過咗先開') : ''}
     </div>
     ${msg ? `<p class="msg">${msg}</p>` : ''}
     <p class="tiny"><button class="link" id="cheat">全部解鎖（試玩用）</button>・<button class="link" id="wipe">重置存檔</button></p>`;
@@ -206,8 +231,9 @@ function showSafehouse(msg) {
     else if (act === 'recruit') { if (recruit(save, id)) { save.team = [...teamIds(), id].slice(-3); writeSave(save); return showSafehouse(`${esc(hero(id).name)} 加入咗！`); } }
     showSafehouse();
   }));
-  card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => startMission(b.dataset.go));
-  $('#cheat').onclick = () => { unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
+  card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { cityTab = null; startMission(b.dataset.go); });
+  card.querySelectorAll('[data-city]').forEach(b => b.onclick = e => { e.stopPropagation(); cityTab = b.dataset.city; showSafehouse(); });
+  $('#cheat').onclick = () => { for (const id in MIDS) save.cleared[id] = true; save.cleared.big = true; unlockAll(save); showSafehouse('已經全部解鎖：資源 300、通用碎片 30。'); };
   $('#wipe').onclick = () => { if (confirm('重置存檔？所有進度會清走。')) { save = resetSave(); showSafehouse('存檔已重置。'); } };
 }
 

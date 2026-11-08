@@ -40,8 +40,21 @@ const bboxOf = (pts, pad = 0) => {
 export function buildMap(data, opts = {}) {
   const cell = opts.cell || CELL, detail = opts.detail !== false;
   const size = data.size, n = Math.ceil(size / cell), rand = rng(20261108);
-  const roads = data.roads.map(r => ({ ...r, w: Math.max(r.w, 3) })); // 太窄嘅巷都要行得過
+  // 香港街名中英對照（「亞皆老街 Argyle Street」）：有中文就淨係留中文
+  const zh = n => (/[一-鿿]/.test(n) ? n.replace(/\s*[A-Za-z][A-Za-z0-9 .,'&()-]*$/, '').trim() : n);
+  const roads = data.roads.map(r => ({ ...r, name: zh(r.name || ''), w: Math.max(r.w, 3) })); // 太窄嘅巷都要行得過
   const water = data.water || [], rivers = data.rivers || [];
+  // 地點：大城市一條街十間藥房，太多就冇挑戰。每種最多幾間、互相隔開；冇藥房就喺中間附近加個救護站
+  const CAP = { pharmacy: 6, store: 6, police: 2, fuel: 2, hardware: 2 };
+  const srcPois = [...data.pois];
+  if (detail && !srcPois.some(p => p.type === 'pharmacy')) srcPois.push({ type: 'pharmacy', name: '救護站', x: size / 2 + 25, y: size / 2 + 10 });
+  const kept = [];
+  for (const p of srcPois) {
+    const same = kept.filter(k => k.type === p.type);
+    if (detail && (same.length >= (CAP[p.type] ?? 99) || same.some(k => Math.hypot(k.x - p.x, k.y - p.y) < 45))) continue;
+    kept.push(p);
+  }
+  data = { ...data, pois: kept };
   const RIVER_W = 42;
 
   // 廢車：擺喺闊路兩邊，會擋路（橋上唔擺）
@@ -266,5 +279,9 @@ export function buildMap(data, opts = {}) {
     }
   }
 
-  return { name: data.name, size, n, cell, walk, cells, start, pois, labels, roads, rivers, idx, free, los, move, cellCenter, nearestFree, draw };
+  // 地標（景點、車站、廟、塔）：大字、唔轉角度、拉遠都顯示
+  // 太近嘅（同一間廟兩個寫法、車站幾個入口）淨係留第一個
+  const landmarks = (data.landmarks || []).filter((l, i, all) => all.findIndex(o => Math.hypot(o.x - l.x, o.y - l.y) < 30) === i);
+  for (const l of landmarks) labels.push({ name: l.name, x: l.x, y: l.y, a: 0, landmark: true });
+  return { name: data.name, size, n, cell, walk, cells, start, pois, labels, landmarks, roads, rivers, idx, free, los, move, cellCenter, nearestFree, draw };
 }

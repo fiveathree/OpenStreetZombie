@@ -463,6 +463,12 @@ export function createBigScene(map, cfg = {}) {
       for (const r of map.rivers) { g.beginPath(); r.pts.forEach((p, i) => (i ? g.lineTo(p[0] * k, p[1] * k) : g.moveTo(p[0] * k, p[1] * k))); g.stroke(); }
       g.strokeStyle = 'rgba(181,89,42,.55)'; g.lineWidth = 2 * f;
       for (const l of lanes) { g.beginPath(); l.pts.forEach((p, i) => (i ? g.lineTo(p.x * k, p.y * k) : g.moveTo(p.x * k, p.y * k))); g.stroke(); }
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${5 * f}px "Noto Sans TC", sans-serif`;
+      for (const [i, l] of map.landmarks.entries()) { // 地標：金色菱形；頭幾個寫埋名
+        const x = l.x * k, y = l.y * k, d = 2.5 * f;
+        g.fillStyle = '#e8b45a'; g.beginPath(); g.moveTo(x, y - d); g.lineTo(x + d, y); g.lineTo(x, y + d); g.lineTo(x - d, y); g.fill();
+        if (i < 8) { g.fillStyle = 'rgba(232,180,90,.8)'; g.fillText(l.name.length > 7 ? l.name.slice(0, 7) + '…' : l.name, x, y - 6 * f); }
+      }
     }
     const k = S / map.size, f = S / 150;
     ctx.drawImage(mmBase, 0, 0);

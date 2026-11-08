@@ -5,7 +5,7 @@
 
 export const CHAPTERS = [
   {
-    id: 'prologue', title: '序章　海晏號', mission: null,
+    id: 'prologue', title: '序章　海晏號', mission: null, part: '第一部：高雄',
     intro: [
       { who: 'narr', text: '港灣市封城第二十一日。電視仍然講「情況受控」，但已經冇人信。' },
       { who: 'narr', text: '凌晨，一艘冇人應無線電嘅貨櫃船「海晏號」，自己飄入高雄港，撞埋三號碼頭。' },
@@ -144,9 +144,241 @@ export const CHAPTERS = [
       { who: 'zb_u_shen', text: '多謝。我要將呢個方法帶返港灣市。嗰邊仲有人等緊。' },
       { who: 'medic', text: '你一個人？' },
       { who: 'zb_u_shen', text: '……如果你哋肯嚟，就唔係一個人。' },
-      { who: 'narr', text: '第一部完。鹽埕、七賢路同愛河兩岸已經佔領，所有地圖可以自由出擊；遲啲會有更多街區同港灣市。' },
+      { who: 'narr', text: '第一部完。鹽埕、七賢路同愛河兩岸已經佔領；高雄嘅六合夜市同旗津亦都可以去。' },
     ],
     lose: '主城失守。退返照相館，重整再嚟。',
+  },
+  // ======== 第二部：香港 ========
+  {
+    id: 'hk0', title: '第六章　海晏號嘅艙單', mission: null, part: '第二部：香港',
+    intro: [
+      { who: 'narr', text: '愛河之後第三日。阿明喺海晏號船艙搵到一本濕咗嘅艙單。' },
+      { who: 'support', text: '呢隻船唔係由港灣市直接嚟。佢中途停過四個港：香港、基隆、橫濱、大阪。' },
+      { who: 'zb_u_shen', text: '每個港都落過貨。Grace 嘅筆記話：母體係由貨櫃入面嘅「種」長出嚟。' },
+      { who: 'control', text: '即係……四個城市，可能已經各有一個巢。' },
+      { who: 'tank', text: '照相館交俾鹽埕啲街坊。我哋跟住艙單行，一個港一個港咁拆。' },
+      { who: 'radio', text: '……呢度係旺角……仲有冇人聽到……我哋喺西洋菜街一座唐樓頂……' },
+      { who: 'zb_u_shen', text: '第一站，香港。' },
+      { who: 'narr', text: '第二部「香港」開始。安全屋可以揀香港嘅地圖。' },
+    ],
+    win: [],
+  },
+  {
+    id: 'hk1', title: '第七章　旺角唐樓', mission: 'hk-mongkok', goal: '喺旺角撐 5 分鐘，接應唐樓頂嘅倖存者',
+    intro: [
+      { who: 'narr', text: '彌敦道塞滿死車。招牌一個疊一個，好多已經跌落街。' },
+      { who: 'radio', text: '我係阿飛！我喺天台之間跳嚟跳去先避得開佢哋。你哋喺街守住，我帶人落嚟！' },
+      { who: 'dps', text: '街窄、人多、屍多。散開就死，記住跟住隊。' },
+      { who: 'medic', text: '藥房喺邊？……好，小地圖上面綠色嗰啲。' },
+    ],
+    radio: [
+      { t: 10, who: 'radio', text: '阿飛：我睇到你哋！再撐多陣，我搵緊落嚟條路！' },
+      { t: 90, who: 'support', text: '後巷好多屍湧出嚟，唔好企喺巷口！' },
+      { t: 170, who: 'radio', text: '阿飛：有個阿伯行唔郁……再俾我一分鐘！' },
+      { t: 260, who: 'tank', text: '最後一輪！頂住！' },
+    ],
+    win: [
+      { who: 'zb_s_fei', text: '十二個人，一個都冇少。多謝晒！' },
+      { who: 'zb_s_fei', text: '你哋搵巢？我喺天台見過——海旁嗰邊，夜晚會有低沉嘅聲。' },
+      { who: 'zb_u_shen', text: '尖沙咀。' },
+      { who: 'narr', text: '阿飛加入咗隊伍。' },
+    ],
+    lose: '旺角嘅街太窄。再嚟過。',
+    reward: { hero: 'zb_s_fei' },
+  },
+  {
+    id: 'hk2', title: '第八章　鐘樓下', mission: 'hk-tst', goal: '夜晚喺尖沙咀撐 5 分鐘，搵出低頻聲嘅來源',
+    intro: [
+      { who: 'narr', text: '夜晚。維港對岸一片黑，得返海旁嘅鐘樓仲企喺度。' },
+      { who: 'zb_s_fei', text: '聲係由海底隧道入口嗰邊傳出嚟。' },
+      { who: 'control', text: '屍群會跟住聲行。我哋喺佢哋條路上面，要頂住。' },
+    ],
+    radio: [
+      { t: 8, who: 'zb_u_shen', text: '夜晚佢哋快好多。跟住街燈行。' },
+      { t: 120, who: 'zb_s_fei', text: '隧道口有嘢郁緊……好大。' },
+      { t: 220, who: 'control', text: '聲停咗一下——佢知道我哋喺度！' },
+    ],
+    win: [
+      { who: 'narr', text: '天光。隧道口嘅肉牆萎縮咗，但係心跳聲冇停。' },
+      { who: 'zb_u_shen', text: '呢個唔係母體，只係觸鬚。真身喺海峽對面——中環。' },
+    ],
+    lose: '尖沙咀嘅夜太長。再嚟過。',
+  },
+  {
+    id: 'hk3', title: '第九章　中環斜路', mission: 'hk-central', goal: '喺中環撐 5 分鐘，打爆香港嘅母體',
+    intro: [
+      { who: 'narr', text: '中環。玻璃幕牆碎晒，石板街上面一級級都係屍。' },
+      { who: 'radio', text: '……後生仔，我喺皇后大道中。我知道條船點解會嚟——我幫佢哋簽過張單。' },
+      { who: 'tank', text: '你邊個？' },
+      { who: 'radio', text: '何定邦。以前做疊碼仔，而家……想贖罪。' },
+    ],
+    radio: [
+      { t: 10, who: 'dps', text: '斜路！喺高處企好，等佢哋行上嚟。' },
+      { t: 150, who: 'radio', text: '何定邦：母體喺舊銀行大廈地庫，等佢出嚟就係機會！' },
+      { t: 240, who: 'zb_u_shen', text: '佢出嚟喇！全部大招！' },
+    ],
+    win: [
+      { who: 'narr', text: '香港嘅母體倒低。整個港島嘅屍群好似突然失咗魂。' },
+      { who: 'zb_s_ho', text: '艙單上面下一個港係基隆。貨櫃第二日就用貨車運咗入台北。' },
+      { who: 'zb_s_ho', text: '我同你哋去。我欠嘅，我要還。' },
+      { who: 'narr', text: '何定邦加入咗隊伍。第二部完。' },
+    ],
+    lose: '中環守唔住。退返海旁，再嚟。',
+    reward: { hero: 'zb_s_ho' },
+  },
+  // ======== 第三部：台北 ========
+  {
+    id: 'tp0', title: '第十章　基隆港', mission: null, part: '第三部：台北',
+    intro: [
+      { who: 'narr', text: '船泊基隆。港口嘅貨櫃門全部向外打開，好似有嘢由入面爬出嚟。' },
+      { who: 'support', text: '台北我熟！我阿叔喺西門町開麵線舖。' },
+      { who: 'radio', text: '……這裡是西門町紅樓，我們有十幾個人，有食物，但是快守不住了……' },
+      { who: 'tank', text: '有食物？咁仲等乜。' },
+      { who: 'narr', text: '第三部「台北」開始。安全屋可以揀台北嘅地圖。' },
+    ],
+    win: [],
+  },
+  {
+    id: 'tp1', title: '第十一章　紅樓', mission: 'tp-ximen', goal: '喺西門町撐 5 分鐘，守住紅樓嘅倖存者',
+    intro: [
+      { who: 'narr', text: '西門町。行人專用區嘅招牌仲著住，喇叭重複播緊同一首歌。' },
+      { who: 'radio', text: '我是林阿明，夜市總舖師！紅樓裡面有一大鍋湯，你們撐住，我請大家吃！' },
+      { who: 'support', text: '又一個阿明……' },
+    ],
+    radio: [
+      { t: 12, who: 'radio', text: '林阿明：喇叭會引牠們過來，想辦法離遠一點！' },
+      { t: 140, who: 'medic', text: '藥房喺邊？我哋傷員多咗。' },
+      { t: 250, who: 'radio', text: '林阿明：湯好了！再撐一下！' },
+    ],
+    win: [
+      { who: 'zb_s_lin', text: '來來來，先吃飯。天塌下來都要吃飯先講。' },
+      { who: 'zb_s_lin', text: '那些東西每晚都往東邊走，往信義區，往 101 那邊。' },
+      { who: 'narr', text: '林阿明加入咗隊伍。' },
+    ],
+    lose: '紅樓失守。再嚟過。',
+    reward: { hero: 'zb_s_lin' },
+  },
+  {
+    id: 'tp2', title: '第十二章　一〇一之夜', mission: 'tp-xinyi', goal: '夜晚喺信義區撐 5 分鐘，打爆台北嘅母體',
+    intro: [
+      { who: 'narr', text: '夜晚。101 冇晒燈，但係樓底下有一團暗紅色嘅光，一閃一閃。' },
+      { who: 'zb_u_shen', text: '母體揀咗最高嗰座樓。佢想個聲傳得更遠。' },
+      { who: 'control', text: '汽油彈夠晒。今晚燒乾淨佢。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_s_ho', text: '廣場好闊，唔好俾佢哋包圍。' },
+      { t: 130, who: 'support', text: '佢哋由捷運站湧出嚟！' },
+      { t: 240, who: 'zb_u_shen', text: '母體出嚟喇！' },
+    ],
+    win: [
+      { who: 'narr', text: '天光。台北嘅心跳聲停咗。' },
+      { who: 'zb_s_ho', text: '下一站，橫濱。貨櫃運咗入東京。' },
+      { who: 'narr', text: '第三部完。' },
+    ],
+    lose: '信義區太闊，守唔住。再嚟過。',
+  },
+  // ======== 第四部：東京 ========
+  {
+    id: 'tk0', title: '第十三章　無聲嘅東京', mission: null, part: '第四部：東京',
+    intro: [
+      { who: 'narr', text: '東京灣。一千幾萬人嘅城市，靜到聽到烏鴉叫。' },
+      { who: 'radio', text: '（日文）……有冇人收到？我係渡邊，秋葉原。我一直聽住軍方頻道……' },
+      { who: 'zb_u_shen', text: '佢講佢截到軍方訊號：自衛隊喺新宿設咗最後防線，但係已經失聯三日。' },
+      { who: 'dps', text: '先去澀谷，同佢會合。' },
+      { who: 'narr', text: '第四部「東京」開始。安全屋可以揀東京嘅地圖。' },
+    ],
+    win: [],
+  },
+  {
+    id: 'tk1', title: '第十四章　十字路口', mission: 'tk-shibuya', goal: '喺澀谷撐 5 分鐘，等渡邊趕到',
+    intro: [
+      { who: 'narr', text: '澀谷。世界最繁忙嘅十字路口，而家四面八方都係屍。' },
+      { who: 'tank', text: '路口太闊，四邊都會嚟。守住中間！' },
+    ],
+    radio: [
+      { t: 15, who: 'radio', text: '渡邊：我喺車站，啲閘口鎖死咗，俾我幾分鐘！' },
+      { t: 150, who: 'control', text: '佢哋好似識得包抄……東京啲屍唔同。' },
+      { t: 260, who: 'radio', text: '渡邊：開咗！我嚟緊！' },
+    ],
+    win: [
+      { who: 'narr', text: '渡邊健司揹住一部改裝收音機跑出嚟。' },
+      { who: 'zb_r_kenji', text: '新宿防線最後一段訊息：「歌舞伎町，地底有嘢」。' },
+    ],
+    lose: '十字路口四面受敵。再嚟過。',
+  },
+  {
+    id: 'tk2', title: '第十五章　歌舞伎町', mission: 'tk-shinjuku', goal: '夜晚喺新宿撐 5 分鐘，打爆東京嘅母體',
+    intro: [
+      { who: 'narr', text: '新宿。夜晚嘅歌舞伎町冇晒燈，只得遠處一下下嘅心跳聲。' },
+      { who: 'zb_r_kenji', text: '我可以用收音機干擾佢嘅低頻聲，但係要時間。' },
+      { who: 'zb_u_shen', text: '你哋守住，佢負責收音機。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_r_kenji', text: '干擾開始。佢哋會亂一陣，但係母體會好嬲。' },
+      { t: 160, who: 'zb_r_kenji', text: '頻率鎖定！母體喺地鐵出口下面！' },
+      { t: 250, who: 'zb_u_shen', text: '佢出嚟喇——收尾！' },
+    ],
+    win: [
+      { who: 'narr', text: '東京嘅母體倒低。收音機入面，自衛隊嘅頻道傳嚟一句：「收到。多謝。」' },
+      { who: 'zb_r_kenji', text: '艙單最後一個港：大阪。我同你哋去。' },
+      { who: 'narr', text: '渡邊健司加入咗隊伍。第四部完。' },
+    ],
+    lose: '歌舞伎町嘅夜太黑。再嚟過。',
+    reward: { hero: 'zb_r_kenji' },
+  },
+  // ======== 第五部：大阪 ========
+  {
+    id: 'os0', title: '第十六章　最後一個港', mission: null, part: '第五部：大阪',
+    intro: [
+      { who: 'narr', text: '大阪港。海晏號嘅最後一批貨櫃，就喺呢度落。' },
+      { who: 'zb_u_shen', text: 'Grace 筆記最後一頁：「最早嘅種，最大嘅母體」。' },
+      { who: 'radio', text: '……道頓堀……我喺橋底……有一個用刀嘅女人救咗我哋……' },
+      { who: 'tank', text: '用刀？' },
+      { who: 'narr', text: '第五部「大阪」開始。安全屋可以揀大阪嘅地圖。' },
+    ],
+    win: [],
+  },
+  {
+    id: 'os1', title: '第十七章　道頓堀', mission: 'os-dotonbori', goal: '夜晚喺道頓堀撐 5 分鐘，同用刀嘅人會合',
+    intro: [
+      { who: 'narr', text: '道頓堀。河兩邊嘅大招牌熄晒，河面浮住好多嘢。' },
+      { who: 'dps', text: '河邊窄，橋上面好守。' },
+    ],
+    radio: [
+      { t: 12, who: 'radio', text: '（遠處）……右邊！再右邊！' },
+      { t: 150, who: 'control', text: '有人喺橋上面斬緊屍——一個人！' },
+      { t: 255, who: 'tank', text: '過去幫佢！' },
+    ],
+    win: [
+      { who: 'zb_u_mio', text: '宮本澪。京都嚟嘅。我本來喺港灣市表演，一直斬到返日本。' },
+      { who: 'zb_u_mio', text: '你哋要搵嘅嘢喺新世界，通天閣下面。我去過，一個人入唔到去。' },
+      { who: 'narr', text: '宮本澪加入咗隊伍。' },
+    ],
+    lose: '道頓堀守唔住。再嚟過。',
+    reward: { hero: 'zb_u_mio' },
+  },
+  {
+    id: 'os2', title: '第十八章　通天閣', mission: 'os-shinsekai', goal: '喺新世界撐 5 分鐘，打爆最大嘅母體',
+    intro: [
+      { who: 'narr', text: '新世界。通天閣成座塔被肉膜包住，好似一條巨大嘅脈。' },
+      { who: 'zb_u_shen', text: '最早嘅種。打低佢，艙單上面嘅所有巢都會失去源頭。' },
+      { who: 'tank', text: '由鹽埕一路到呢度。最後一次——一個都唔准倒低。' },
+    ],
+    radio: [
+      { t: 10, who: 'zb_u_mio', text: '佢哋會由塔底湧出嚟，守住街口！' },
+      { t: 120, who: 'zb_r_kenji', text: '低頻聲好強，干擾頂唔住！' },
+      { t: 200, who: 'zb_s_fei', text: '塔頂有嘢郁緊——好大！' },
+      { t: 270, who: 'zb_u_shen', text: '就係而家！' },
+    ],
+    win: [
+      { who: 'narr', text: '通天閣嘅肉膜一層層剝落。遠至香港、台北、東京，屍群同一刻停低。' },
+      { who: 'control', text: '……完咗？' },
+      { who: 'zb_u_shen', text: '艙單上面嘅都完咗。但係海晏號最初由邊度出發？' },
+      { who: 'zb_s_ho', text: '……港灣市。' },
+      { who: 'tank', text: '咁就去港灣市。' },
+      { who: 'narr', text: '全部章節完。所有地圖可以自由出擊；港灣市篇，遲啲再講。' },
+    ],
+    lose: '通天閣下面太危險。退返道頓堀，再嚟。',
   },
 ];
 

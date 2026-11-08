@@ -133,6 +133,13 @@ export function drawLabels(ctx, labels, cam, W, H, dpr, vis) {
     if (!vis(l.x, l.y, 10)) continue;
     ctx.save();
     ctx.translate(W / 2 + (l.x - cam.x) * cam.z, H / 2 + (l.y - cam.y) * cam.z);
+    if (l.landmark) { // 地標：菱形記號＋名
+      ctx.fillStyle = '#e8b45a'; ctx.strokeStyle = 'rgba(23,25,24,.9)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(6, 0); ctx.lineTo(0, 6); ctx.lineTo(-6, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.font = '900 14px "Noto Sans TC", sans-serif'; ctx.lineWidth = 3.5;
+      ctx.strokeText(l.name, 0, -16); ctx.fillText(l.name, 0, -16);
+      ctx.restore(); continue;
+    }
     ctx.rotate(l.a);
     ctx.font = l.minor ? '500 11px "Noto Sans TC", sans-serif' : '900 13px "Noto Sans TC", sans-serif';
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(23,25,24,.9)';

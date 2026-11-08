@@ -215,3 +215,10 @@ body.m-big #selHint.hud[hidden] { display: none !important; }
 body.m-mid #radio.hud[hidden], body.m-big #radio.hud[hidden], body.m-street #radio.hud[hidden] { display: none !important; }
 body.m-mid #radio.hud:not([hidden]), body.m-big #radio.hud:not([hidden]), body.m-street #radio.hud:not([hidden]) { display: block !important; }
 body.m-street #radio { bottom: calc(190px + var(--safe-b)); }
+
+/* 安全屋：揀城市 */
+.cities { display: flex; gap: 4px; flex-wrap: wrap; }
+.city { border: 1px solid var(--line); background: #1b2022; color: var(--ink); font: 900 14px var(--display); padding: 4px 12px; cursor: pointer; display: inline-flex; gap: 4px; align-items: baseline; }
+.city.on { background: var(--rust); border-color: var(--rust); color: #15100c; }
+.city:disabled { opacity: .4; cursor: default; }
+.city small { font-size: 10px; color: var(--dim); }
